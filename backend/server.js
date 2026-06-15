@@ -357,7 +357,8 @@ app.post('/api/webhook/receber', async (req, res) => {
 
     if (!telefoneRaw || fromMe || !texto) return res.json({ status: 'Ignorado' });
 
-    const telefoneLimpo = telefoneRaw.replace(/\D/g, '');
+    // Extrai apenas os dígitos iniciais — ignora sufixos como -v23-UUID ou @s.whatsapp.net
+    const telefoneLimpo = telefoneRaw.match(/^\d+/)?.[0] || '';
     const { rows } = await pool.query(
       'SELECT status_robo FROM contatos_whatsapp WHERE telefone = $1',
       [telefoneLimpo]
