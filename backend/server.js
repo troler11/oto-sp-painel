@@ -1,0 +1,1308 @@
+// ============================================================
+// OTOFLOW CRM - BACKEND MELHORADO
+// Melhorias: paginação, cache, logs estruturados, índices,
+// refresh token, auditoria, validação robusta
+// ============================================================
+
+require('dotenv').config();
+
+const http = require('http');
+const express = require('express');
+const cors = require('cors');
+const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
+const { Pool } = require('pg');
+const path = require('path');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { Server: SocketServer } = require('socket.io');
+
+const app = express();
+
+// ============================================================
+// CONFIGURAÇÕES BÁSICAS
+// ============================================================
+app.set('trust proxy', 1);
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:'],
+      connectSrc: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : [];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Requisições sem Origin (server-to-server, curl, etc.) são permitidas
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS: Origem não autorizada.'));
+  },
+  credentials: true,
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(cookieParser());
+
+// ============================================================
+// LOGGER ESTRUTURADO
+// ============================================================
+const LOG_LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
+const LOG_LEVEL = LOG_LEVELS[process.env.LOG_LEVEL?.toUpperCase()] ?? LOG_LEVELS.INFO;
+
+const logger = {
+  _log: (level, message, meta = {}) => {
+    if (LOG_LEVELS[level] > LOG_LEVEL) return;
+    const entry = {
+      ts: new Date().toISOString(),
+      level,
+      message,
+      ...meta
+    };
+    const out = JSON.stringify(entry);
+    if (level === 'ERROR') return console.error(out);
+    if (level === 'WARN')  return console.warn(out);
+    console.log(out);
+  },
+  info:  (msg, meta) => logger._log('INFO', msg, meta),
+  warn:  (msg, meta) => logger._log('WARN', msg, meta),
+  error: (msg, meta) => logger._log('ERROR', msg, meta),
+  debug: (msg, meta) => logger._log('DEBUG', msg, meta),
+};
+
+// ============================================================
+// CACHE SIMPLES EM MEMÓRIA (para rotas de leitura frequente)
+// ============================================================
+const cache = new Map();
+
+const setCache = (key, value, ttlMs = 60_000) => {
+  cache.set(key, { value, expiry: Date.now() + ttlMs });
+};
+
+const getCache = (key) => {
+  const item = cache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiry) { cache.delete(key); return null; }
+  return item.value;
+};
+
+const clearCache = (prefix) => {
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
+};
+
+// ============================================================
+// RATE LIMITING
+// ============================================================
+const limiterGeral = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: { erro: 'Excesso de requisições. Tente novamente em 15 minutos.' }
+});
+app.use('/api/', limiterGeral);
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { erro: 'Muitas tentativas de login. Bloqueado por 15 minutos.' }
+});
+
+// ============================================================
+// VARIÁVEIS DE AMBIENTE
+// ============================================================
+const WAHA_API_URL    = process.env.WAHA_API_URL;
+const WAHA_SESSION    = process.env.WAHA_SESSION || 'default';
+const WAHA_API_KEY    = process.env.WAHA_API_KEY;
+const JWT_SECRET      = process.env.JWT_SECRET;
+const REFRESH_SECRET  = process.env.REFRESH_SECRET;
+const WEBHOOK_SECRET  = process.env.WEBHOOK_SECRET;
+
+if (!JWT_SECRET || !REFRESH_SECRET) {
+  console.error(JSON.stringify({ level: 'ERROR', message: 'JWT_SECRET e REFRESH_SECRET devem estar definidos nas variáveis de ambiente. O servidor não iniciará sem eles.' }));
+  process.exit(1);
+}
+
+// ============================================================
+// HTTP SERVER + SOCKET.IO
+// ============================================================
+const server = http.createServer(app);
+
+const io = new SocketServer(server, {
+  cors: {
+    origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : false,
+    credentials: true,
+  },
+});
+
+io.use((socket, next) => {
+  const cookieHeader = socket.handshake.headers.cookie || '';
+  const tokenCookie = cookieHeader.split(';').find(c => c.trim().startsWith('token='));
+  const token = tokenCookie ? decodeURIComponent(tokenCookie.trim().slice('token='.length)) : null;
+  if (!token) return next(new Error('Não autenticado'));
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return next(new Error('Token inválido'));
+    socket.user = decoded;
+    next();
+  });
+});
+
+io.on('connection', (socket) => {
+  logger.debug('Socket conectado', { usuario: socket.user?.nome });
+  socket.on('disconnect', () => logger.debug('Socket desconectado', { usuario: socket.user?.nome }));
+});
+
+app.set('io', io);
+
+// ============================================================
+// POSTGRESQL
+// ============================================================
+const pool = new Pool({
+  user:     process.env.DB_USER,
+  host:     process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port:     parseInt(process.env.DB_PORT || '5432', 10),
+  // Pool ajustado para produção
+  max: 20,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
+
+pool.query('SELECT NOW()', (err, res) => {
+  if (err) logger.error('Falha ao conectar ao PostgreSQL', { message: err.message });
+  else logger.info('Conectado ao PostgreSQL', { time: res.rows[0].now });
+});
+
+// ============================================================
+// CRIAÇÃO AUTOMÁTICA DE ÍNDICES (melhora performance)
+// ============================================================
+const criarIndices = async () => {
+  const indices = [
+    `CREATE INDEX IF NOT EXISTS idx_agendamentos_status     ON agendamentos (status_atendimento)`,
+    `CREATE INDEX IF NOT EXISTS idx_agendamentos_criacao    ON agendamentos (data_criacao DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_agendamentos_contato    ON agendamentos (contato_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_agendamentos_medico     ON agendamentos (medico_final)`,
+    `CREATE INDEX IF NOT EXISTS idx_agendamentos_data_cons  ON agendamentos (data_consulta)`,
+    `CREATE INDEX IF NOT EXISTS idx_contatos_telefone       ON contatos_whatsapp (telefone)`,
+    `CREATE INDEX IF NOT EXISTS idx_contatos_status_robo    ON contatos_whatsapp (status_robo)`,
+    `CREATE INDEX IF NOT EXISTS idx_chat_session            ON chat_messages (session_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_chat_created            ON chat_messages (created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_auditoria_usuario       ON auditoria_log (usuario_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_auditoria_criacao       ON auditoria_log (criado_em DESC)`,
+  ];
+  for (const sql of indices) {
+    try { await pool.query(sql); }
+    catch (e) { logger.warn('Índice já existe ou erro', { sql, error: e.message }); }
+  }
+  logger.info('Índices verificados/criados com sucesso.');
+};
+
+// ============================================================
+// TABELAS NOVAS: AUDITORIA + REFRESH TOKENS
+// ============================================================
+const criarTabelasExtras = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS auditoria_log (
+        id            SERIAL PRIMARY KEY,
+        usuario_id    INTEGER,
+        usuario_nome  VARCHAR(255),
+        acao          VARCHAR(100) NOT NULL,
+        entidade      VARCHAR(100),
+        entidade_id   INTEGER,
+        detalhes      JSONB,
+        ip            VARCHAR(45),
+        criado_em     TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id          SERIAL PRIMARY KEY,
+        usuario_id  INTEGER NOT NULL,
+        token_hash  VARCHAR(255) UNIQUE NOT NULL,
+        expira_em   TIMESTAMPTZ NOT NULL,
+        criado_em   TIMESTAMPTZ DEFAULT NOW(),
+        revogado    BOOLEAN DEFAULT FALSE
+      )
+    `);
+
+    logger.info('Tabelas de auditoria e refresh tokens verificadas.');
+  } catch (e) {
+    logger.error('Erro ao criar tabelas extras', { error: e.message });
+  }
+};
+
+// Inicializa índices e tabelas ao arrancar
+(async () => {
+  await criarTabelasExtras();
+  await criarIndices();
+})();
+
+// ============================================================
+// HELPER: REGISTAR AUDITORIA
+// ============================================================
+const registarAuditoria = async ({ usuario_id, usuario_nome, acao, entidade, entidade_id, detalhes, ip }) => {
+  try {
+    await pool.query(
+      `INSERT INTO auditoria_log (usuario_id, usuario_nome, acao, entidade, entidade_id, detalhes, ip)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [usuario_id, usuario_nome, acao, entidade, entidade_id, JSON.stringify(detalhes || {}), ip]
+    );
+  } catch (e) {
+    logger.warn('Erro ao registar auditoria', { error: e.message });
+  }
+};
+
+// ============================================================
+// VALIDAÇÃO (substituição simples de joi/zod)
+// ============================================================
+const validar = {
+  email: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '')),
+  minLen: (v, n) => String(v || '').trim().length >= n,
+  numero: (v, min = 0) => !isNaN(Number(v)) && Number(v) >= min,
+  time:   (v) => !v || /^\d{2}:\d{2}(:\d{2})?$/.test(String(v)),
+  date:   (v) => !v || !isNaN(Date.parse(String(v))),
+};
+
+// ============================================================
+// MIDDLEWARE: VERIFICAR TOKEN JWT
+// ============================================================
+const verificarToken = (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) return res.status(403).json({ erro: 'Acesso negado. Token não fornecido.' });
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      if (err.name === 'TokenExpiredError') return res.status(401).json({ erro: 'Sessão expirada.', expirado: true });
+      return res.status(401).json({ erro: 'Token inválido.' });
+    }
+    req.user = decoded;
+    next();
+  });
+};
+
+// ============================================================
+// MIDDLEWARE: LOG DE REQUISIÇÕES
+// ============================================================
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    if (req.path.startsWith('/api/')) {
+      logger.info('HTTP', {
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        ms: Date.now() - start,
+        ip: req.ip,
+      });
+    }
+  });
+  next();
+});
+
+// ============================================================
+// WEBHOOK PARA RECEBER MENSAGENS
+// ============================================================
+app.post('/api/webhook/receber', async (req, res) => {
+  const tokenFornecido = req.headers['x-webhook-secret'];
+
+  if (!WEBHOOK_SECRET) {
+    logger.error('WEBHOOK_SECRET não configurado');
+    return res.status(500).json({ erro: 'Erro de configuração.' });
+  }
+
+  const secretValido = (() => {
+    if (!tokenFornecido) return false;
+    try {
+      const a = Buffer.from(WEBHOOK_SECRET);
+      const b = Buffer.from(tokenFornecido);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch { return false; }
+  })();
+
+  if (!secretValido) {
+    logger.warn('Bloqueio no Webhook. Token inválido.', { ip: req.ip });
+    return res.status(401).json({ erro: 'Não autorizado.' });
+  }
+
+  try {
+    const body = req.body;
+    let telefoneRaw = '', texto = '', fromMe = false;
+
+    if (body.event === 'message' && body.payload) {
+      telefoneRaw = body.payload.from;
+      texto = body.payload.body;
+      fromMe = body.payload.fromMe;
+    } else if (body.data?.message) {
+      telefoneRaw = body.data.key?.remoteJid;
+      texto = body.data.message?.conversation || body.data.message?.extendedTextMessage?.text || '';
+      fromMe = body.data.key?.fromMe;
+    } else if (body.telefone && body.texto) {
+      telefoneRaw = body.telefone;
+      texto = body.texto;
+    }
+
+    if (!telefoneRaw || fromMe || !texto) return res.json({ status: 'Ignorado' });
+
+    const telefoneLimpo = telefoneRaw.replace(/\D/g, '');
+    const { rows } = await pool.query(
+      'SELECT status_robo FROM contatos_whatsapp WHERE telefone = $1',
+      [telefoneLimpo]
+    );
+
+    if (rows.length > 0 && rows[0].status_robo === 'Humano') {
+      const msgData = { type: 'human', content: texto, additional_kwargs: {} };
+      await pool.query(
+        'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+        [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+      );
+      await pool.query(
+        'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
+        [telefoneLimpo]
+      );
+      req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
+    }
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.error('Erro no Webhook', { error: err.message });
+    res.status(500).json({ erro: 'Erro interno' });
+  }
+});
+
+// ============================================================
+// AUTH: LOGIN + REFRESH TOKEN
+// ============================================================
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OtoFlow Operacional', ts: new Date().toISOString() });
+});
+
+app.post('/api/login', loginLimiter, async (req, res) => {
+  const { email, senha } = req.body;
+
+  if (!validar.email(email) || !validar.minLen(senha, 1)) {
+    return res.status(400).json({ erro: 'E-mail ou senha inválidos.' });
+  }
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+    if (rows.length === 0) return res.status(401).json({ erro: 'Dados incorretos.' });
+
+    const usuario = rows[0];
+    if (!await bcrypt.compare(senha, usuario.senha_hash)) {
+      logger.warn('Tentativa de login falhada', { email, ip: req.ip });
+      return res.status(401).json({ erro: 'Dados incorretos.' });
+    }
+
+    const payload = { id: usuario.id, email: usuario.email, nome: usuario.nome, papel: usuario.papel };
+
+    // Access token: 12h
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
+
+    // Refresh token: 7 dias
+    const refreshToken = jwt.sign({ id: usuario.id }, REFRESH_SECRET, { expiresIn: '7d' });
+    const refreshHash = await bcrypt.hash(refreshToken, 8);
+    const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await pool.query(
+      `INSERT INTO refresh_tokens (usuario_id, token_hash, expira_em) VALUES ($1, $2, $3)`,
+      [usuario.id, refreshHash, expiraEm]
+    );
+
+    await registarAuditoria({
+      usuario_id: usuario.id, usuario_nome: usuario.nome,
+      acao: 'LOGIN', entidade: 'usuarios', entidade_id: usuario.id,
+      detalhes: { email }, ip: req.ip
+    });
+
+    const cookieBase = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict' };
+    res.cookie('token', token, { ...cookieBase, maxAge: 12 * 60 * 60 * 1000 });
+    res.cookie('refresh_token', refreshToken, { ...cookieBase, maxAge: 7 * 24 * 60 * 60 * 1000, path: '/api/refresh-token' });
+
+    res.json({ usuario: { email: usuario.email, nome: usuario.nome, papel: usuario.papel } });
+  } catch (err) {
+    logger.error('Erro no login', { error: err.message });
+    res.status(500).json({ erro: 'Erro interno.' });
+  }
+});
+
+app.post('/api/refresh-token', async (req, res) => {
+  const refreshToken = req.cookies?.refresh_token;
+  if (!refreshToken) return res.status(400).json({ erro: 'Refresh token não fornecido.' });
+
+  try {
+    const decoded = jwt.verify(refreshToken, REFRESH_SECRET);
+
+    // Verifica se o token existe e não foi revogado
+    const { rows } = await pool.query(
+      `SELECT rt.*, u.email, u.nome, u.papel 
+       FROM refresh_tokens rt 
+       JOIN usuarios u ON u.id = rt.usuario_id
+       WHERE rt.usuario_id = $1 AND rt.revogado = false AND rt.expira_em > NOW()
+       ORDER BY rt.criado_em DESC LIMIT 10`,
+      [decoded.id]
+    );
+
+    // Verifica hash
+    let tokenValido = null;
+    for (const row of rows) {
+      if (await bcrypt.compare(refreshToken, row.token_hash)) {
+        tokenValido = row; break;
+      }
+    }
+
+    if (!tokenValido) return res.status(401).json({ erro: 'Refresh token inválido ou expirado.' });
+
+    const novoToken = jwt.sign(
+      { id: tokenValido.usuario_id, email: tokenValido.email, nome: tokenValido.nome, papel: tokenValido.papel },
+      JWT_SECRET,
+      { expiresIn: '12h' }
+    );
+
+    res.cookie('token', novoToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 12 * 60 * 60 * 1000,
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.warn('Refresh token inválido', { error: err.message });
+    res.status(401).json({ erro: 'Token inválido.' });
+  }
+});
+
+app.post('/api/logout', verificarToken, async (req, res) => {
+  try {
+    // Revoga todos os refresh tokens do utilizador
+    await pool.query(
+      'UPDATE refresh_tokens SET revogado = true WHERE usuario_id = $1',
+      [req.user.id]
+    );
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'LOGOUT', entidade: 'usuarios', entidade_id: req.user.id,
+      ip: req.ip
+    });
+    res.clearCookie('token');
+    res.clearCookie('refresh_token', { path: '/api/refresh-token' });
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao fazer logout.' });
+  }
+});
+
+app.get('/api/me', verificarToken, (req, res) => {
+  res.json({ usuario: req.user });
+});
+
+// ============================================================
+// AUDITORIA (Admin/Gerente)
+// ============================================================
+app.get('/api/auditoria', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+
+  const page  = Math.max(1, parseInt(req.query.page || '1', 10));
+  const limit = Math.min(100, parseInt(req.query.limit || '50', 10));
+  const offset = (page - 1) * limit;
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM auditoria_log ORDER BY criado_em DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    const { rows: total } = await pool.query('SELECT COUNT(*) FROM auditoria_log');
+    res.json({ dados: rows, total: parseInt(total[0].count), page, limit });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao buscar auditoria.' });
+  }
+});
+
+// ============================================================
+// GESTÃO DE USUÁRIOS
+// ============================================================
+app.post('/api/usuarios', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+
+  const { nome, email, senha, papel } = req.body;
+
+  // Validação robusta
+  const erros = [];
+  if (!validar.minLen(nome, 2))    erros.push('Nome deve ter pelo menos 2 caracteres.');
+  if (!validar.email(email))       erros.push('E-mail inválido.');
+  if (!validar.minLen(senha, 6))   erros.push('Senha deve ter pelo menos 6 caracteres.');
+  if (!['recepcao', 'gerente'].includes(papel)) erros.push('Papel inválido.');
+  if (erros.length) return res.status(400).json({ erro: erros.join(' ') });
+
+  try {
+    const checkEmail = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
+    if (checkEmail.rows.length > 0) return res.status(400).json({ erro: 'E-mail já em uso.' });
+
+    const senhaHash = await bcrypt.hash(senha, 12);
+    const { rows } = await pool.query(
+      'INSERT INTO usuarios (nome, email, senha_hash, papel) VALUES ($1, $2, $3, $4) RETURNING id',
+      [nome.trim(), email.toLowerCase().trim(), senhaHash, papel]
+    );
+
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'CRIAR_USUARIO', entidade: 'usuarios', entidade_id: rows[0].id,
+      detalhes: { nome, email, papel }, ip: req.ip
+    });
+
+    res.json({ sucesso: true, mensagem: 'Conta criada com sucesso!' });
+  } catch (err) {
+    logger.error('Erro ao criar utilizador', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao criar utilizador.' });
+  }
+});
+
+app.get('/api/usuarios', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+  try {
+    const { rows } = await pool.query('SELECT id, nome, email, papel FROM usuarios ORDER BY nome ASC');
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao buscar utilizadores.' });
+  }
+});
+
+app.put('/api/usuarios/:id', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) return res.status(403).json({ erro: 'Acesso negado.' });
+  const { id } = req.params;
+  const { nome } = req.body;
+  if (!validar.minLen(nome, 2)) return res.status(400).json({ erro: 'Nome inválido.' });
+  try {
+    await pool.query('UPDATE usuarios SET nome = $1 WHERE id = $2', [nome.trim(), id]);
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'EDITAR_USUARIO', entidade: 'usuarios', entidade_id: parseInt(id),
+      detalhes: { nome }, ip: req.ip
+    });
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao atualizar.' });
+  }
+});
+
+app.put('/api/usuarios/:id/senha', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) return res.status(403).json({ erro: 'Acesso negado.' });
+  const { id } = req.params;
+  const { novaSenha } = req.body;
+  if (!validar.minLen(novaSenha, 6)) return res.status(400).json({ erro: 'Senha deve ter pelo menos 6 caracteres.' });
+  try {
+    const senhaHash = await bcrypt.hash(novaSenha, 12);
+    await pool.query('UPDATE usuarios SET senha_hash = $1 WHERE id = $2', [senhaHash, id]);
+    // Revoga refresh tokens antigos ao trocar senha
+    await pool.query('UPDATE refresh_tokens SET revogado = true WHERE usuario_id = $1', [id]);
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'ALTERAR_SENHA', entidade: 'usuarios', entidade_id: parseInt(id),
+      ip: req.ip
+    });
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao alterar senha.' });
+  }
+});
+
+app.delete('/api/usuarios/:id', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) return res.status(403).json({ erro: 'Acesso negado.' });
+  const id = req.params.id;
+  if (parseInt(id) === req.user.id) return res.status(400).json({ erro: 'Não pode excluir a si mesmo.' });
+  try {
+    await pool.query('DELETE FROM refresh_tokens WHERE usuario_id = $1', [id]);
+    await pool.query('DELETE FROM usuarios WHERE id = $1', [id]);
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'EXCLUIR_USUARIO', entidade: 'usuarios', entidade_id: parseInt(id),
+      ip: req.ip
+    });
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao excluir.' });
+  }
+});
+
+// ============================================================
+// MÉDICOS (com cache)
+// ============================================================
+app.get('/api/medicos', verificarToken, async (req, res) => {
+  const cacheKey = 'medicos:todos';
+  const cached = getCache(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM medicos ORDER BY nome ASC');
+    setCache(cacheKey, rows, 5 * 60_000); // cache 5 min
+    res.json(rows);
+  } catch (err) {
+    logger.error('Erro ao buscar médicos', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao buscar corpo clínico.' });
+  }
+});
+
+app.post('/api/medicos', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+
+  const { nome, unidade, inicio_expediente, fim_expediente, inicio_almoco, fim_almoco, duracao_consulta } = req.body;
+
+  // Validação
+  const erros = [];
+  if (!validar.minLen(nome, 2))          erros.push('Nome inválido.');
+  if (!validar.minLen(unidade, 2))       erros.push('Unidade inválida.');
+  if (!validar.time(inicio_expediente))  erros.push('Horário de início inválido.');
+  if (!validar.time(fim_expediente))     erros.push('Horário de fim inválido.');
+  if (!validar.numero(duracao_consulta, 10)) erros.push('Duração mínima 10 min.');
+  if (erros.length) return res.status(400).json({ erro: erros.join(' ') });
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO medicos (nome, unidade, inicio_expediente, fim_expediente, inicio_almoco, fim_almoco, duracao_consulta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [nome.trim(), unidade, inicio_expediente, fim_expediente, inicio_almoco || null, fim_almoco || null, duracao_consulta || 30]
+    );
+
+    clearCache('medicos:');
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'CRIAR_MEDICO', entidade: 'medicos', entidade_id: rows[0].id,
+      detalhes: { nome, unidade }, ip: req.ip
+    });
+
+    res.json(rows[0]);
+  } catch (err) {
+    logger.error('Erro ao salvar médico', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao salvar médico.' });
+  }
+});
+
+app.put('/api/medicos/:id', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+
+  const { id } = req.params;
+  const { nome, unidade, inicio_expediente, fim_expediente, inicio_almoco, fim_almoco, duracao_consulta } = req.body;
+
+  if (!validar.minLen(nome, 2) || !validar.minLen(unidade, 2)) {
+    return res.status(400).json({ erro: 'Nome e unidade são obrigatórios.' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE medicos SET nome=$1, unidade=$2, inicio_expediente=$3, fim_expediente=$4,
+       inicio_almoco=$5, fim_almoco=$6, duracao_consulta=$7
+       WHERE id=$8 RETURNING *`,
+      [nome.trim(), unidade, inicio_expediente, fim_expediente, inicio_almoco, fim_almoco, duracao_consulta, id]
+    );
+
+    if (rows.length === 0) return res.status(404).json({ erro: 'Médico não encontrado.' });
+
+    clearCache('medicos:');
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'EDITAR_MEDICO', entidade: 'medicos', entidade_id: parseInt(id),
+      detalhes: { nome, unidade }, ip: req.ip
+    });
+
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao atualizar médico.' });
+  }
+});
+
+app.delete('/api/medicos/:id', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+
+  try {
+    const { rowCount } = await pool.query('DELETE FROM medicos WHERE id = $1', [req.params.id]);
+    if (rowCount === 0) return res.status(404).json({ erro: 'Médico não encontrado.' });
+
+    clearCache('medicos:');
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'EXCLUIR_MEDICO', entidade: 'medicos', entidade_id: parseInt(req.params.id),
+      ip: req.ip
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao remover médico.' });
+  }
+});
+
+// ============================================================
+// AGENDAMENTOS (com paginação)
+// ============================================================
+app.get('/api/agendamentos', verificarToken, async (req, res) => {
+  // Paginação opcional: ?page=1&limit=100 (default sem limite para compatibilidade com o frontend)
+  const page  = req.query.page  ? Math.max(1, parseInt(req.query.page, 10))   : null;
+  const limit = req.query.limit ? Math.min(500, parseInt(req.query.limit, 10)) : null;
+  const offset = page && limit ? (page - 1) * limit : null;
+
+  // Filtros opcionais na query string
+  const { status, medico, unidade, data_inicio, data_fim } = req.query;
+
+  try {
+    let where = [];
+    let params = [];
+    let pIdx = 1;
+
+    if (status) { where.push(`a.status_atendimento = $${pIdx++}`); params.push(status); }
+    if (medico) { where.push(`(a.medico_final ILIKE $${pIdx} OR a.nome_medico ILIKE $${pIdx})`); params.push(`%${medico}%`); pIdx++; }
+    if (unidade) { where.push(`a.unidade ILIKE $${pIdx++}`); params.push(`%${unidade}%`); }
+    if (data_inicio) { where.push(`a.data_criacao >= $${pIdx++}`); params.push(data_inicio); }
+    if (data_fim)    { where.push(`a.data_criacao <= $${pIdx++}`); params.push(data_fim + 'T23:59:59'); }
+
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    const query = `
+      SELECT
+        a.id, a.data_criacao, a.intencao, a.especialidade,
+        a.unidade, a.pagamento, a.periodo_atendimento, a.nome_medico, a.observacoes,
+        a.status_atendimento, a.nome_paciente, a.para_terceiro,
+        a.atendente_nome, a.data_consulta, a.hora_consulta, a.medico_final,
+        a.cpf_paciente, a.nascimento_paciente, a.tipo_consulta,
+        a.data_atendimento, a.data_cancelamento,
+        c.telefone, c.nome_titular, c.ultima_mensagem
+      FROM agendamentos a
+      LEFT JOIN contatos_whatsapp c ON a.contato_id = c.id
+      ${whereClause}
+      ORDER BY a.data_criacao DESC
+      ${limit ? `LIMIT $${pIdx++} OFFSET $${pIdx++}` : ''}
+    `;
+
+    if (limit) { params.push(limit); params.push(offset); }
+
+    const { rows } = await pool.query(query, params);
+
+    if (page && limit) {
+      const { rows: total } = await pool.query(
+        `SELECT COUNT(*) FROM agendamentos a ${whereClause}`,
+        params.slice(0, params.length - 2)
+      );
+      return res.json({ dados: rows, total: parseInt(total[0].count), page, limit });
+    }
+
+    res.json(rows);
+  } catch (err) {
+    logger.error('Erro ao buscar agendamentos', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao buscar agendamentos.' });
+  }
+});
+
+// ============================================================
+// LEADS
+// ============================================================
+app.get('/api/leads', verificarToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        c.id, c.telefone, c.nome_titular, c.cpf_titular, c.status_robo,
+        c.ultima_mensagem, c.data_cadastro
+      FROM contatos_whatsapp c
+      LEFT JOIN LATERAL (
+        SELECT status_atendimento FROM agendamentos a
+        WHERE a.contato_id = c.id ORDER BY a.data_criacao DESC LIMIT 1
+      ) latest ON true
+      WHERE latest.status_atendimento IS NULL OR latest.status_atendimento = 'CANCELADO'
+      ORDER BY c.ultima_mensagem DESC
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao buscar leads.' });
+  }
+});
+
+// ============================================================
+// MODELOS DE MENSAGEM (com cache)
+// ============================================================
+app.get('/api/modelos', verificarToken, async (req, res) => {
+  const cacheKey = 'modelos:todos';
+  const cached = getCache(cacheKey);
+  if (cached) return res.json(cached);
+
+  try {
+    const { rows } = await pool.query('SELECT * FROM modelos_mensagem ORDER BY id ASC');
+    setCache(cacheKey, rows, 2 * 60_000);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao buscar modelos.' });
+  }
+});
+
+app.post('/api/modelos', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Apenas gestores podem criar modelos.' });
+  }
+  const { titulo, texto } = req.body;
+  if (!validar.minLen(titulo, 2) || !validar.minLen(texto, 2)) {
+    return res.status(400).json({ erro: 'Título e texto são obrigatórios.' });
+  }
+  try {
+    const { rows } = await pool.query(
+      'INSERT INTO modelos_mensagem (titulo, texto, criado_por_id) VALUES ($1, $2, $3) RETURNING *',
+      [titulo.trim(), texto.trim(), req.user.id]
+    );
+    clearCache('modelos:');
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao salvar modelo.' });
+  }
+});
+
+app.put('/api/modelos/:id', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+  const { titulo, texto } = req.body;
+  if (!validar.minLen(titulo, 2) || !validar.minLen(texto, 2)) {
+    return res.status(400).json({ erro: 'Título e texto são obrigatórios.' });
+  }
+  try {
+    const { rows } = await pool.query(
+      'UPDATE modelos_mensagem SET titulo=$1, texto=$2 WHERE id=$3 RETURNING *',
+      [titulo.trim(), texto.trim(), req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ erro: 'Modelo não encontrado.' });
+    clearCache('modelos:');
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao atualizar modelo.' });
+  }
+});
+
+app.delete('/api/modelos/:id', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+  try {
+    await pool.query('DELETE FROM modelos_mensagem WHERE id = $1', [req.params.id]);
+    clearCache('modelos:');
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao remover modelo.' });
+  }
+});
+
+// ============================================================
+// STATUS DE AGENDAMENTOS
+// ============================================================
+app.put('/api/status', verificarToken, async (req, res) => {
+  const { id, status, atendente, observacoes, notificar, data_atendimento, data_cancelamento } = req.body;
+
+  const statusValidos = ['PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO', 'CANCELADO'];
+  if (!statusValidos.includes(status)) {
+    return res.status(400).json({ erro: 'Status inválido.' });
+  }
+
+  try {
+    // Verificação de propriedade para recepcionistas
+    if (req.user.papel === 'recepcao') {
+      const check = await pool.query('SELECT atendente_nome FROM agendamentos WHERE id = $1', [id]);
+      if (check.rows.length > 0 && check.rows[0].atendente_nome &&
+          check.rows[0].atendente_nome !== req.user.nome && status !== 'PENDENTE') {
+        return res.status(403).json({ erro: 'Não pode alterar um paciente assumido por outro colega.' });
+      }
+    }
+
+    let query = 'UPDATE agendamentos SET status_atendimento = $1';
+    let params = [status];
+    let p = 2;
+
+    if (status === 'PENDENTE') {
+      query += `, atendente_nome = NULL`;
+    } else if (atendente) {
+      query += `, atendente_nome = $${p++}`; params.push(atendente);
+    }
+
+    if (observacoes)        { query += `, observacoes = $${p++}`;        params.push(observacoes); }
+    if (data_atendimento)   { query += `, data_atendimento = $${p++}`;   params.push(data_atendimento); }
+    if (data_cancelamento)  { query += `, data_cancelamento = $${p++}`;  params.push(data_cancelamento); }
+
+    query += `, data_atualizacao = NOW()`;
+    query += ` WHERE id = $${p} RETURNING contato_id, nome_paciente, especialidade, unidade`;
+    params.push(id);
+
+    const { rows: agendados } = await pool.query(query, params);
+
+    // Notificação WhatsApp para cancelamento
+    if (status === 'CANCELADO' && agendados.length > 0) {
+      const ag = agendados[0];
+      const { rows: contatos } = await pool.query(
+        `UPDATE contatos_whatsapp SET status_robo = 'Robô' WHERE id = $1 RETURNING telefone`,
+        [ag.contato_id]
+      );
+
+      if (notificar && contatos.length > 0) {
+        const tel = contatos[0].telefone.replace(/\D/g, '');
+        const msg = `Olá, *${ag.nome_paciente}*.\n\nInfelizmente a sua consulta precisou ser *CANCELADA* ❌.\n\nPara remarcar, envie uma nova mensagem.`;
+        await enviarWhatsApp(tel, msg);
+      }
+    }
+
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: `STATUS_${status}`, entidade: 'agendamentos', entidade_id: parseInt(id),
+      detalhes: { status, atendente, observacoes }, ip: req.ip
+    });
+
+    req.app.get('io')?.emit('agendamento:atualizado', {
+      id: parseInt(id),
+      status_atendimento: status,
+      atendente_nome: status === 'PENDENTE' ? null : (atendente || undefined),
+      data_atendimento: data_atendimento || undefined,
+      data_cancelamento: data_cancelamento || undefined,
+      observacoes: observacoes || undefined,
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.error('Erro ao atualizar status', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao atualizar status.' });
+  }
+});
+
+// ============================================================
+// AGENDAR CONSULTA
+// ============================================================
+app.put('/api/agendar', verificarToken, async (req, res) => {
+  const { id, data_consulta, hora_consulta, medico_final } = req.body;
+
+  // Validação
+  if (!validar.date(data_consulta)) return res.status(400).json({ erro: 'Data inválida.' });
+  if (!validar.time(hora_consulta)) return res.status(400).json({ erro: 'Hora inválida.' });
+  if (!validar.minLen(medico_final, 2)) return res.status(400).json({ erro: 'Médico é obrigatório.' });
+
+  try {
+    if (req.user.papel === 'recepcao') {
+      const check = await pool.query('SELECT atendente_nome FROM agendamentos WHERE id = $1', [id]);
+      if (check.rows.length > 0 && check.rows[0].atendente_nome && check.rows[0].atendente_nome !== req.user.nome) {
+        return res.status(403).json({ erro: 'Não pode agendar um paciente assumido por outro colega.' });
+      }
+    }
+
+    const { rows: agendados } = await pool.query(
+      `UPDATE agendamentos SET status_atendimento='AGENDADO', data_consulta=$1, hora_consulta=$2,
+       medico_final=$3, data_atualizacao=NOW()
+       WHERE id=$4 RETURNING contato_id, nome_paciente, especialidade, unidade`,
+      [data_consulta, hora_consulta, medico_final, id]
+    );
+
+    if (agendados.length > 0) {
+      const ag = agendados[0];
+      const { rows: contatos } = await pool.query(
+        `UPDATE contatos_whatsapp SET status_robo='Robô' WHERE id=$1 RETURNING telefone`,
+        [ag.contato_id]
+      );
+
+      if (contatos.length > 0) {
+        const tel = contatos[0].telefone.replace(/\D/g, '');
+        const [ano, mes, dia] = data_consulta.split('-');
+        const msg = `Olá, *${ag.nome_paciente}*! ✅\n\nSua consulta de *${ag.especialidade}* foi confirmada:\n\n📅 *Data:* ${dia}/${mes}/${ano}\n⏰ *Horário:* ${hora_consulta}\n👨‍⚕️ *Médico(a):* Dr(a). ${medico_final}\n🏥 *Unidade:* ${ag.unidade}\n\nAté logo! 😊`;
+        await enviarWhatsApp(tel, msg);
+      }
+    }
+
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'AGENDAR_CONSULTA', entidade: 'agendamentos', entidade_id: parseInt(id),
+      detalhes: { data_consulta, hora_consulta, medico_final }, ip: req.ip
+    });
+
+    req.app.get('io')?.emit('agendamento:atualizado', {
+      id: parseInt(id),
+      status_atendimento: 'AGENDADO',
+      data_consulta,
+      hora_consulta,
+      medico_final,
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.error('Erro ao agendar', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao agendar consulta.' });
+  }
+});
+
+// ============================================================
+// CHAT
+// ============================================================
+app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
+  const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
+  try {
+    const { rows } = await pool.query(
+      `SELECT message, created_at FROM chat_messages
+       WHERE session_id = $1 OR session_id = $2
+       ORDER BY created_at ASC
+       LIMIT 200`,
+      [telefoneLimpo, `${telefoneLimpo}@s.whatsapp.net`]
+    );
+    const formatado = rows.map(r => {
+      const msg = r.message;
+      return {
+        texto: msg.content || msg.data?.content || msg.text || '',
+        origem: (msg.type === 'human' || msg.sender === 'human') ? 'paciente' : 'ia_ou_recepcao',
+        data: r.created_at
+      };
+    });
+    res.json(formatado);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao buscar histórico.' });
+  }
+});
+
+app.post('/api/chat/enviar', verificarToken, async (req, res) => {
+  const { telefone, texto } = req.body;
+
+  if (!validar.minLen(texto, 1)) return res.status(400).json({ erro: 'Texto vazio.' });
+
+  const telefoneLimpo = telefone.replace(/\D/g, '');
+  try {
+    await enviarWhatsApp(telefoneLimpo, texto);
+    const msgData = { type: 'ai', content: texto, additional_kwargs: { sender: req.user.nome } };
+    await pool.query(
+      'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+      [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+    );
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao enviar mensagem.' });
+  }
+});
+
+app.put('/api/chat/:telefone/interromper-robo', verificarToken, async (req, res) => {
+  const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE contatos_whatsapp SET status_robo='Humano' WHERE telefone=$1`,
+      [telefoneLimpo]
+    );
+    if (rowCount === 0) return res.status(404).json({ erro: 'Contacto não encontrado.' });
+
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'PAUSAR_ROBO', entidade: 'contatos_whatsapp',
+      detalhes: { telefone: telefoneLimpo }, ip: req.ip
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao pausar robô.' });
+  }
+});
+
+// ============================================================
+// LEADS: DESCARTAR E CONVERTER
+// ============================================================
+app.delete('/api/leads/:id', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+  try {
+    await pool.query('DELETE FROM contatos_whatsapp WHERE id = $1', [req.params.id]);
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao descartar lead.' });
+  }
+});
+
+app.post('/api/leads/:id/converter', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente', 'recepcao'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+  try {
+    const leadRes = await pool.query('SELECT * FROM contatos_whatsapp WHERE id = $1', [req.params.id]);
+    if (leadRes.rowCount === 0) return res.status(404).json({ erro: 'Contacto não encontrado.' });
+
+    const lead = leadRes.rows[0];
+
+    await pool.query(`
+      INSERT INTO agendamentos (contato_id, nome_paciente, cpf_paciente, status_atendimento, intencao, especialidade, unidade, pagamento, para_terceiro)
+      VALUES ($1, $2, $3, 'PENDENTE', 'Conversão Manual', 'Não informada', 'A Definir', 'A Combinar', false)
+    `, [lead.id, lead.nome_titular || lead.telefone || 'Paciente sem nome', lead.cpf_titular || null]);
+
+    await pool.query(
+      `UPDATE contatos_whatsapp SET status_robo='Finalizado' WHERE id=$1`,
+      [lead.id]
+    );
+
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'CONVERTER_LEAD', entidade: 'contatos_whatsapp', entidade_id: lead.id,
+      ip: req.ip
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.error('Erro ao converter lead', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao converter lead.' });
+  }
+});
+
+// ============================================================
+// RELATÓRIOS AVANÇADOS
+// ============================================================
+app.get('/api/relatorios/resumo', verificarToken, async (req, res) => {
+  if (!['admin', 'gerente'].includes(req.user.papel)) {
+    return res.status(403).json({ erro: 'Acesso negado.' });
+  }
+
+  const { data_inicio, data_fim } = req.query;
+
+  try {
+    const params = [];
+    let dateFilter = '';
+    if (data_inicio && data_fim) {
+      dateFilter = `WHERE a.data_criacao BETWEEN $1 AND $2`;
+      params.push(data_inicio, data_fim + 'T23:59:59');
+    }
+
+    const medicoWhere = dateFilter
+      ? `${dateFilter} AND (medico_final IS NOT NULL OR nome_medico IS NOT NULL)`
+      : `WHERE (medico_final IS NOT NULL OR nome_medico IS NOT NULL)`;
+
+    const [totalRes, statusRes, unidadeRes, pagamentoRes, medicoRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*) as total FROM agendamentos a ${dateFilter}`, params),
+      pool.query(`SELECT status_atendimento, COUNT(*) as qtd FROM agendamentos a ${dateFilter} GROUP BY status_atendimento`, params),
+      pool.query(`SELECT unidade, COUNT(*) as qtd FROM agendamentos a ${dateFilter} GROUP BY unidade`, params),
+      pool.query(`SELECT pagamento, COUNT(*) as qtd FROM agendamentos a ${dateFilter} GROUP BY pagamento`, params),
+      pool.query(`SELECT COALESCE(medico_final, nome_medico) as medico, COUNT(*) as qtd FROM agendamentos a ${medicoWhere} GROUP BY 1 ORDER BY 2 DESC LIMIT 10`, params),
+    ]);
+
+    res.json({
+      total: parseInt(totalRes.rows[0].total),
+      porStatus: statusRes.rows,
+      porUnidade: unidadeRes.rows,
+      porPagamento: pagamentoRes.rows,
+      topMedicos: medicoRes.rows,
+    });
+  } catch (err) {
+    logger.error('Erro nos relatórios', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao gerar relatórios.' });
+  }
+});
+
+app.get('/api/relatorios/evolucao-diaria', verificarToken, async (req, res) => {
+  const diasRaw = parseInt(req.query.dias || '30', 10);
+  const dias = isNaN(diasRaw) ? 30 : Math.min(90, Math.max(1, diasRaw));
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        DATE(data_criacao) as dia,
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status_atendimento = 'AGENDADO')   as agendados,
+        COUNT(*) FILTER (WHERE status_atendimento = 'FINALIZADO')  as finalizados,
+        COUNT(*) FILTER (WHERE status_atendimento = 'CANCELADO')   as cancelados
+      FROM agendamentos
+      WHERE data_criacao >= NOW() - ($1 * INTERVAL '1 day')
+      GROUP BY DATE(data_criacao)
+      ORDER BY dia ASC
+    `, [dias]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro na evolução diária.' });
+  }
+});
+
+// ============================================================
+// HELPER: ENVIAR WHATSAPP
+// ============================================================
+async function enviarWhatsApp(telefone, texto) {
+  if (!WAHA_API_URL) {
+    logger.warn('WAHA_API_URL não configurado. Mensagem não enviada.', { telefone });
+    return;
+  }
+  const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+  if (WAHA_API_KEY) headers['X-Api-Key'] = WAHA_API_KEY;
+
+  try {
+    const resp = await fetch(WAHA_API_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ chatId: `${telefone}@c.us`, text: texto, session: WAHA_SESSION }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!resp.ok) logger.warn('WAHA retornou erro', { status: resp.status, telefone });
+  } catch (err) {
+    logger.error('Falha ao enviar WhatsApp', { error: err.message, telefone });
+  }
+}
+
+// ============================================================
+// LIMPEZA PERIÓDICA: refresh tokens expirados
+// ============================================================
+setInterval(async () => {
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM refresh_tokens WHERE expira_em < NOW() OR revogado = true`
+    );
+    if (rowCount > 0) logger.info(`Limpeza: ${rowCount} refresh tokens removidos.`);
+  } catch (e) {
+    logger.warn('Erro na limpeza de tokens', { error: e.message });
+  }
+}, 60 * 60 * 1000); // 1 hora
+
+// ============================================================
+// SERVIR O FRONTEND REACT
+// ============================================================
+const publicPath = path.resolve(__dirname, 'public');
+app.use(express.static(publicPath));
+
+app.get('*', (req, res) => {
+  const indexPath = path.join(publicPath, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      logger.error('index.html não encontrado', { path: indexPath });
+      res.status(404).send('Frontend não encontrado. Verifique a compilação.');
+    }
+  });
+});
+
+// ============================================================
+// GRACEFUL SHUTDOWN
+// ============================================================
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM recebido. Encerrando graciosamente...');
+  await pool.end();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT recebido. Encerrando...');
+  await pool.end();
+  process.exit(0);
+});
+
+// ============================================================
+// INICIAR SERVIDOR
+// ============================================================
+const PORT = parseInt(process.env.PORT || '3000', 10);
+server.listen(PORT, '0.0.0.0', () => {
+  logger.info(`OtoFlow iniciado`, { porta: PORT, ambiente: process.env.NODE_ENV || 'development' });
+});

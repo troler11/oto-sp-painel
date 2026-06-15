@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker --version)",
+      "Bash(rtk npm *)",
+      "Bash(rtk read *)",
+      "Bash(rtk ls *)",
+      "Bash(npm install *)",
+      "Bash(npm approve-scripts *)",
+      "Bash(rtk npx *)",
+      "Bash(jobs -l)",
+      "Bash(rtk curl *)",
+      "Bash(rtk find *)",
+      "Bash(node *)",
+      "Bash(rtk git *)",
+      "Bash(gh auth *)",
+      "PowerShell(gh auth *)"
+    ]
+  }
+}

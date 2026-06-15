@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  backend-clinica:
+    build: ./backend
+    container_name: api_clinica
+    ports:
+      - "3000:3000"
+    restart: always
+    env_file:
+      - .env
+
+  frontend-clinica:
+    build: ./frontend
+    container_name: painel_clinica
+    ports:
+      - "80:80"
+    depends_on:
+      - backend-clinica
+    restart: always
