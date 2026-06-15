@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Clock, Zap, CalendarDays, CheckCircle2, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { Activity, Clock, Zap, CalendarDays, CheckCircle2, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getAvatarCor } from '../utils/helpers';
 
@@ -86,7 +86,6 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
         {colapsada && <div className="py-2 border-t border-slate-800 mx-1" />}
         <NavBtn id="LEADS" icon={<Target size={17} />} label="Recuperação de Leads" />
         <NavBtn id="RELATORIOS" icon={<BarChart3 size={17} />} label="Relatórios & BI" />
-        <NavBtn id="CALENDARIO" icon={<Calendar size={17} />} label="Calendário" />
 
         {isAdmin && (
           <>

@@ -23,7 +23,6 @@ import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import PatientCard from './components/PatientCard';
 import ChatPanel from './components/ChatPanel';
-import CalendarView from './components/CalendarView';
 import PatientTimeline from './components/PatientTimeline';
 import ConfirmModal from './components/ConfirmModal';
 import ToastContainer from './components/ToastContainer';
@@ -176,7 +175,6 @@ export default function App() {
       if (e.key === '4') setFiltro('AGENDADO');
       if (e.key === '5') setFiltro('FINALIZADO');
       if (e.key === '6') setFiltro('CANCELADO');
-      if (e.key === 'c' || e.key === 'C') setFiltro('CALENDARIO');
       if (e.key === 'd' || e.key === 'D') setFiltro('RELATORIOS');
     };
     window.addEventListener('keydown', handler);
@@ -620,7 +618,7 @@ export default function App() {
           <Header filtro={filtro} searchTerm={searchTerm} setSearchTerm={setSearchTerm} dataInicio={dataInicio} setDataInicio={setDataInicio} dataFim={dataFim} setDataFim={setDataFim} carregandoDados={carregandoDados} buscarDados={buscarDados} notificacoes={notificacoes} setNotificacoes={setNotificacoes} painelNotifAberto={painelNotifAberto} setPainelNotifAberto={setPainelNotifAberto} />
 
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            {!['RELATORIOS', 'LEADS', 'CALENDARIO'].includes(filtro) && (
+            {!['RELATORIOS', 'LEADS'].includes(filtro) && (
               <div className="flex gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm mb-6 overflow-x-auto scrollbar-hide">
                 {ABAS.map(aba => (
                   <button key={aba} onClick={() => setFiltro(aba)}
@@ -634,8 +632,6 @@ export default function App() {
 
             {filtro === 'RELATORIOS' ? (
               <Dashboard agendamentos={filtrosAg} leads={filtrosLeads} />
-            ) : filtro === 'CALENDARIO' ? (
-              <CalendarView agendamentos={agendamentos} onCardClick={ag => { setPacienteTimeline(ag); }} />
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={filtrosAg.map(a => String(a.id))} strategy={verticalListSortingStrategy}>

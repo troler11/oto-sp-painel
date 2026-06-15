@@ -1,4 +1,4 @@
-import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, PieChart, Users, Target, CheckCircle2, FileText, Wallet, Filter, Zap, BarChart2, Award } from 'lucide-react';
+import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, PieChart, Users, Target, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
 import type { Agendamento, Lead } from '../types';
 import { formatarDataBr, formatarHora } from '../utils/helpers';
 
@@ -72,17 +72,6 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   });
   const maxEvol = Math.max(...evolucaoDiaria.map(e => e.qtd), 1);
 
-  const diasSemana = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const horariosCalor = ['08h', '09h', '10h', '11h', '13h', '14h', '15h', '16h', '17h'];
-  const mapaCalor: Record<string, number> = {};
-  agendamentos.forEach(a => {
-    if (a.data_consulta && a.hora_consulta) {
-      const d = new Date(a.data_consulta);
-      const key = `${d.getDay()}-${parseInt(a.hora_consulta.substring(0, 2))}`;
-      mapaCalor[key] = (mapaCalor[key] || 0) + 1;
-    }
-  });
-  const maxCalor = Math.max(...Object.values(mapaCalor), 1);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 pb-10">
@@ -328,45 +317,6 @@ export default function Dashboard({ agendamentos, leads }: Props) {
                 </div>
               ))}
           </div>
-        </div>
-      </div>
-
-      {/* MAPA DE CALOR */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-        <h3 className="text-sm font-extrabold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
-          <Zap size={18} className="text-amber-500" /> Mapa de Calor · Demanda por Horário
-        </h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-center text-xs">
-            <thead>
-              <tr>
-                <th className="text-slate-400 font-bold pr-3 pb-2 text-left">Hora</th>
-                {diasSemana.map(d => <th key={d} className="text-slate-500 font-bold pb-2 px-1">{d}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {horariosCalor.map(hora => {
-                const h = parseInt(hora);
-                return (
-                  <tr key={hora}>
-                    <td className="text-slate-400 font-bold pr-3 py-1 text-left">{hora}</td>
-                    {[1, 2, 3, 4, 5, 6].map(dia => {
-                      const val = mapaCalor[`${dia}-${h}`] || 0;
-                      return (
-                        <td key={dia} className="px-1 py-1">
-                          <div className="w-full h-7 rounded-md mx-auto transition-all hover:scale-110 cursor-default"
-                            style={{ backgroundColor: val === 0 ? '#f1f5f9' : `rgba(17, 202, 160, ${0.15 + (val / maxCalor) * 0.85})` }}
-                            title={`${hora} ${diasSemana[dia - 1]}: ${val} consultas`}>
-                            {val > 0 && <span className="flex items-center justify-center h-full text-[10px] font-extrabold text-white">{val}</span>}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         </div>
       </div>
 
