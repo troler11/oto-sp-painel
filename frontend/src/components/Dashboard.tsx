@@ -1,4 +1,4 @@
-import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, PieChart, Users, Target, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
+import { Clock, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, PieChart, Users, Target, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
 import type { Agendamento, Lead } from '../types';
 import { formatarDataBr, formatarHora } from '../utils/helpers';
 
@@ -248,30 +248,7 @@ export default function Dashboard({ agendamentos, leads }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* PAGAMENTOS */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <h3 className="text-sm font-extrabold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
-            <CreditCard size={18} className="text-amber-500" /> Formas de Pagamento
-          </h3>
-          <div className="space-y-4">
-            {[
-              { label: 'Particular/PIX', qtd: particulares, cor: 'bg-amber-400', bg: 'bg-amber-50', tc: 'text-amber-700' },
-              { label: 'Convênios', qtd: conveniosCount, cor: 'bg-blue-400', bg: 'bg-blue-50', tc: 'text-blue-700' },
-            ].map((p, i) => (
-              <div key={i}>
-                <div className="flex justify-between text-xs font-bold mb-1.5">
-                  <span className={`${p.bg} ${p.tc} px-2 py-0.5 rounded-md`}>{p.label}</span>
-                  <span className="text-slate-600">{p.qtd} ({Math.round((p.qtd / totalPag) * 100)}%)</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5">
-                  <div className={`${p.cor} h-2.5 rounded-full`} style={{ width: `${(p.qtd / totalPag) * 100}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* FIDELIZAÇÃO */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
           <h3 className="text-sm font-extrabold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
