@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send } from 'lucide-react';
-import { ModeloMensagem, MensagemChat, PacienteChat } from '../types';
+import type { ModeloMensagem, MensagemChat, PacienteChat } from '../types';
 import { useApp } from '../context/AppContext';
 
 interface Props {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
-  DndContext, DragEndEvent, DragOverlay, DragStartEvent,
+  DndContext, DragOverlay,
   PointerSensor, useSensor, useSensors, closestCenter,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';

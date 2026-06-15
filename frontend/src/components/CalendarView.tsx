@@ -2,7 +2,7 @@ import FullCalendar from '@fullcalendar/react';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
-import { Agendamento } from '../types';
+import type { Agendamento } from '../types';
 
 interface Props { agendamentos: Agendamento[]; onCardClick: (ag: Agendamento) => void; }
 

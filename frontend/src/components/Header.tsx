@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { ChevronRight, Search, X, CalendarDays, Bell, RefreshCw } from 'lucide-react';
-import { Notificacao } from '../types';
+import type { Notificacao } from '../types';
 
 interface Props {
   filtro: string;

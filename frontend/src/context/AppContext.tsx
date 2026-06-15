@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { Sessao, Notificacao } from '../types';
+import type { Sessao, Notificacao } from '../types';
 
 interface AppContextValue {
   sessao: Sessao | null;

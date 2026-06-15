@@ -1,5 +1,5 @@
 import { X, Clock, User, CalendarDays, CheckCircle2, XCircle, Activity, MessageSquare } from 'lucide-react';
-import { Agendamento } from '../types';
+import type { Agendamento } from '../types';
 import { formatarHora, formatarDataBr } from '../utils/helpers';
 
 interface Props { paciente: Agendamento; onClose: () => void; }

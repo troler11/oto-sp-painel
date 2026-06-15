@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History } from 'lucide-react';
-import { Agendamento } from '../types';
+import type { Agendamento } from '../types';
 import { formatarDataBr, formatarHoraBr, formatarHora, getUrgencia, getAvatarCor } from '../utils/helpers';
 import { useApp } from '../context/AppContext';
 

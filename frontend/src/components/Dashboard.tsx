@@ -1,5 +1,5 @@
 import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, PieChart, Users, Target, CheckCircle2, FileText, Wallet, Filter, Zap, BarChart2, Award } from 'lucide-react';
-import { Agendamento, Lead } from '../types';
+import type { Agendamento, Lead } from '../types';
 import { formatarDataBr, formatarHora } from '../utils/helpers';
 
 interface Props { agendamentos: Agendamento[]; leads: Lead[]; }
