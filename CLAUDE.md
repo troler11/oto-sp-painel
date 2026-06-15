@@ -22,11 +22,6 @@ node server.js    # Requer variáveis de ambiente definidas (ver .env)
 docker compose up --build   # Usa env_file: .env na raiz
 ```
 
-### Git
-```bash
-git add <files> && git commit -m "..." && git push
-```
-
 ## Arquitetura
 
 ### Monorepo sem workspace
@@ -44,23 +39,43 @@ Todo o backend vive em `backend/server.js`. A ordem de leitura é:
 ### Auth flow
 - Login seta dois cookies `httpOnly`: `token` (12h) e `refresh_token` (7d, path `/api/refresh-token`)
 - `fetchSeguro` no frontend sempre usa `credentials: 'include'` — nunca Authorization header
-- Token expirado retorna `401 { expirado: true }` — frontend deve chamar `POST /api/refresh-token` e retentar
+- Token expirado retorna `401 { expirado: true }` — frontend chama `POST /api/refresh-token` e retenta
 - Logout revoga o refresh token no banco (`revogado = true`)
 
 ### Frontend — estado centralizado em App.tsx
 `App.tsx` é o único componente com estado global e lógica de negócio. Todos os componentes filhos recebem callbacks via props. O `AppContext` expõe apenas `sessao`, `fetchSeguro`, `adicionarNotificacao` e `setNotificacaoErro`.
 
+### Fluxo do Kanban
+Statuses: `PENDENTE → EM ATENDIMENTO → AGENDADO → FINALIZADO / CANCELADO`
+
+Existe um segundo caminho de finalização direta:
+`EM ATENDIMENTO → FINALIZADO` (botão "Finalizar Atendimento") — para dúvidas rápidas sem agendar consulta.
+
+A distinção entre os dois caminhos é feita pelo campo `data_consulta`:
+- **Via Agendamento**: `data_consulta` preenchida
+- **Atendimento Rápido / Dúvida**: `data_consulta = null`
+
+Qualquer lógica que deva aplicar-se **apenas a consultas reais** deve incluir `&& a.data_consulta` no filtro. Isso inclui: Formas de Pagamento, Ranking de Médicos, campo de pagamento no card e no perfil do paciente.
+
 ### Socket.io
 Conexão iniciada em `useEffect` após login (`io({ withCredentials: true })`). O backend autentica o socket via middleware que lê o mesmo cookie `token`. Eventos: `agendamento:atualizado` e `mensagem:nova`.
 
 ### Tipos TypeScript
-Todas as interfaces estão em `frontend/src/types.ts`. Sempre importar como `import type { ... }` — o Vite 6 com rolldown é estrito sobre isso e falha no build se usar import de valor para tipos.
+Todas as interfaces estão em `frontend/src/types.ts`. Sempre importar como `import type { ... }` — o Vite com rolldown falha no build se usar import de valor para tipos.
 
 ### Cache in-memory (backend)
 Rotas `GET /api/medicos` (5min) e `GET /api/modelos` (2min) usam cache Map. Chamar `clearCache('medicos:')` ou `clearCache('modelos:')` após qualquer escrita nessas entidades.
 
 ### Papéis de usuário
 `admin` e `gerente` têm acesso total. `recepcao` não pode alterar cards assumidos por outros atendentes (verificação em `PUT /api/status` e `PUT /api/agendar`).
+
+### Chat WhatsApp — session_id
+O WAHA pode enviar session IDs no formato `5511997255184-v23-UUID@s.whatsapp.net`. Para extrair o telefone, usar `telefoneRaw.match(/^\d+/)?.[0]` — **nunca** `replace(/\D/g,'')`, que inclui dígitos do UUID.
+
+A query de histórico usa `session_id LIKE '55119..%'` para cobrir todos os formatos históricos armazenados (inclusive os gerados com o bug antigo).
+
+### Valores ignorados em campos de médico
+Os valores `'A confirmar'`, `'Qualquer'` e `'Indiferente'` são tratados como ausência de médico em: `PatientCard`, Ranking de Médicos (Dashboard) e pré-preenchimento do `ScheduleModal`.
 
 ## Variáveis de ambiente obrigatórias
 `JWT_SECRET` e `REFRESH_SECRET` — o servidor chama `process.exit(1)` se ausentes.
