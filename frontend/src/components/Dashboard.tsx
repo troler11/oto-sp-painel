@@ -47,8 +47,9 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const uniTatuape = agendamentos.filter(a => a.unidade?.toLowerCase().includes('tatuap')).length;
   const totalUni = uniOlimpia + uniTatuape || 1;
 
-  const conveniosCount = totalAtendimentos - particulares;
-  const totalPag = (particulares + conveniosCount) || 1;
+  const totalComConsulta = agendamentos.filter(a => ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento) && a.data_consulta).length;
+  const conveniosCount = totalComConsulta - particulares;
+  const totalPag = totalComConsulta || 1;
 
   const atendentes: Record<string, number> = {};
   agendamentos.forEach(a => { if (a.atendente_nome && a.status_atendimento !== 'PENDENTE') { atendentes[a.atendente_nome] = (atendentes[a.atendente_nome] || 0) + 1; } });
