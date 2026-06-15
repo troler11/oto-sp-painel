@@ -30,6 +30,11 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const noShowCount = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta).length;
   const taxaNoShow = concluidos > 0 ? Math.round((noShowCount / (concluidos + noShowCount)) * 100) : 0;
 
+  // Separação dos dois caminhos de atendimento
+  const emAgendamento = agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length;
+  const finalizadosViaConsulta = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && a.data_consulta).length;
+  const finalizadosDireto = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && !a.data_consulta).length;
+
   const novosCount = agendamentos.filter(a => a.tipo_consulta?.toLowerCase().includes('agendamento') || a.tipo_consulta?.toLowerCase().includes('consulta')).length;
   const retornosCount = agendamentos.filter(a => a.tipo_consulta?.toLowerCase().includes('retorno')).length;
   const totalRetencao = novosCount + retornosCount || 1;
@@ -137,12 +142,12 @@ export default function Dashboard({ agendamentos, leads }: Props) {
           <h3 className="text-sm font-extrabold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
             <Filter size={18} className="text-indigo-500" /> Funil de Conversão
           </h3>
-          <div className="space-y-3">
+
+          {/* Topo do funil — etapas comuns */}
+          <div className="space-y-3 mb-5">
             {[
-              { label: 'Contactos Totais', qtd: contatosTotais, pct: 100, cor: 'bg-slate-200', tc: 'text-slate-700' },
+              { label: 'Contactos Totais', qtd: contatosTotais, pct: 100, cor: 'bg-slate-300', tc: 'text-slate-700' },
               { label: 'Triados pela IA', qtd: totalAtendimentos, pct: contatosTotais > 0 ? Math.round((totalAtendimentos / contatosTotais) * 100) : 0, cor: 'bg-blue-400', tc: 'text-blue-700' },
-              { label: 'Consultas Agendadas', qtd: concluidos, pct: contatosTotais > 0 ? Math.round((concluidos / contatosTotais) * 100) : 0, cor: 'bg-[#11caa0]', tc: 'text-emerald-700' },
-              { label: 'Consultas Realizadas', qtd: finalizados, pct: contatosTotais > 0 ? Math.round((finalizados / contatosTotais) * 100) : 0, cor: 'bg-indigo-500', tc: 'text-indigo-700' },
             ].map((item, i) => (
               <div key={i}>
                 <div className="flex justify-between text-xs font-bold mb-1">
@@ -154,6 +159,64 @@ export default function Dashboard({ agendamentos, leads }: Props) {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Divisor de caminhos */}
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex-1 h-px bg-slate-200" />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-1">bifurcação</span>
+            <div className="flex-1 h-px bg-slate-200" />
+          </div>
+
+          {/* Dois caminhos lado a lado */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Caminho 1 — Via Agendamento */}
+            <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+              <p className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider mb-3 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> Via Agendamento
+              </p>
+              <div className="space-y-3">
+                {[
+                  { label: 'Em Agendamento', qtd: emAgendamento, cor: 'bg-[#11caa0]', tc: 'text-emerald-700' },
+                  { label: 'Consulta Realizada', qtd: finalizadosViaConsulta, cor: 'bg-emerald-600', tc: 'text-emerald-800' },
+                ].map((item, i) => (
+                  <div key={i}>
+                    <div className="flex justify-between text-[11px] font-bold mb-1">
+                      <span className="text-slate-600">{item.label}</span>
+                      <span className={item.tc}>{item.qtd} <span className="font-normal text-slate-400">({totalAtendimentos > 0 ? Math.round((item.qtd / totalAtendimentos) * 100) : 0}%)</span></span>
+                    </div>
+                    <div className="w-full bg-emerald-100 rounded-full h-1.5">
+                      <div className={`${item.cor} h-1.5 rounded-full transition-all duration-700`}
+                        style={{ width: `${totalAtendimentos > 0 ? Math.max((item.qtd / totalAtendimentos) * 100, item.qtd > 0 ? 4 : 0) : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Caminho 2 — Atendimento Rápido */}
+            <div className="bg-indigo-50 rounded-xl p-3 border border-indigo-100">
+              <p className="text-[10px] font-extrabold text-indigo-700 uppercase tracking-wider mb-3 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" /> Atendimento Rápido
+              </p>
+              <div className="space-y-3">
+                {[
+                  { label: 'Dúvida / Orientação', qtd: finalizadosDireto, cor: 'bg-indigo-400', tc: 'text-indigo-700' },
+                  { label: 'Finalizado Direto', qtd: finalizadosDireto, cor: 'bg-indigo-600', tc: 'text-indigo-800' },
+                ].map((item, i) => (
+                  <div key={i}>
+                    <div className="flex justify-between text-[11px] font-bold mb-1">
+                      <span className="text-slate-600">{item.label}</span>
+                      <span className={item.tc}>{item.qtd} <span className="font-normal text-slate-400">({totalAtendimentos > 0 ? Math.round((item.qtd / totalAtendimentos) * 100) : 0}%)</span></span>
+                    </div>
+                    <div className="w-full bg-indigo-100 rounded-full h-1.5">
+                      <div className={`${item.cor} h-1.5 rounded-full transition-all duration-700`}
+                        style={{ width: `${totalAtendimentos > 0 ? Math.max((item.qtd / totalAtendimentos) * 100, item.qtd > 0 ? 4 : 0) : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
