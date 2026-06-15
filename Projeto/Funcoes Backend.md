@@ -49,6 +49,7 @@ tags: [backend, funções, referência]
 ### `POST /api/webhook/receber`
 - Valida header `x-webhook-secret` com `timingSafeEqual` (evita timing attacks)
 - Suporta 3 formatos de payload WAHA
+- Extrai telefone com `telefoneRaw.match(/^\d+/)?.[0]` — captura só os dígitos iniciais, ignorando sufixos como `-v23-UUID` ou `@s.whatsapp.net`. **Nunca usar `replace(/\D/g,'')` aqui** — inclui dígitos do UUID.
 - Se contato em modo `Humano`: salva mensagem em `chat_messages` + emite `mensagem:nova` via Socket.io
 - Se contato em modo `Robô`: ignora (o bot responde diretamente)
 
@@ -65,9 +66,10 @@ tags: [backend, funções, referência]
 ### `PUT /api/status`
 - Atualiza `status_atendimento` de um agendamento
 - Status válidos: `PENDENTE`, `EM ATENDIMENTO`, `AGENDADO`, `FINALIZADO`, `CANCELADO`
+- Finalizar de `EM ATENDIMENTO → FINALIZADO` direto (sem `data_consulta`) é um caminho válido para atendimentos rápidos/dúvidas
 - Se `CANCELADO` + `notificar=true`: envia mensagem WhatsApp via WAHA
 - Emite evento `agendamento:atualizado` via Socket.io para todos os clientes
-- Recepcionist não pode alterar card assumido por outra pessoa
+- Recepcionista não pode alterar card assumido por outra pessoa
 
 ### `PUT /api/agendar`
 - Atualiza data, hora e médico de um agendamento
@@ -113,11 +115,12 @@ tags: [backend, funções, referência]
 ## Chat
 
 ### `GET /api/chat/:telefone`
-- Lista mensagens do `chat_messages` por `session_id` = `{telefone}@s.whatsapp.net`
+- Busca mensagens em `chat_messages` com `session_id LIKE '55119..%'`
+- O `LIKE` com prefixo do número cobre todos os formatos históricos: bare, `@s.whatsapp.net`, `-v23-UUID` e variantes com dígitos extras gravadas por versões anteriores
 
 ### `POST /api/chat/enviar`
 - Envia mensagem via WAHA API
-- Salva no banco para histórico
+- Salva no banco para histórico com `session_id = '{telefone}@s.whatsapp.net'`
 
 ### `PUT /api/chat/:telefone/interromper-robo`
 - Atualiza `status_robo = 'Humano'` em `contatos_whatsapp`

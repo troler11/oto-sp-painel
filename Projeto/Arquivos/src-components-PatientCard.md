@@ -40,6 +40,22 @@ const podeEditar = sessao?.user.nome === item.atendente_nome
 
 Botões de ação ficam desabilitados (`cursor-not-allowed`) se `!podeEditar`.
 
+## Lógica do campo médico
+
+Valores `'A confirmar'`, `'Qualquer'` e `'Indiferente'` são tratados como ausência de médico — o campo não é exibido. Para status `AGENDADO`/`FINALIZADO` usa `medico_final`; nos demais usa `nome_medico`.
+
+```ts
+const MEDICO_IGNORAR = ['qualquer', 'indiferente', 'a confirmar'];
+const medicoRaw = (['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.medico_final)
+  ? item.medico_final
+  : (item.nome_medico || '');
+const medicoExibir = MEDICO_IGNORAR.includes(medicoRaw.toLowerCase()) ? '' : medicoRaw;
+```
+
+## Visibilidade do campo Pagamento
+
+O campo de pagamento **só é exibido quando `item.data_consulta` está preenchido** (consulta formal agendada). Atendimentos rápidos/dúvidas (sem `data_consulta`) não mostram pagamento.
+
 ## Botões por status
 
 | Status | Botões disponíveis |

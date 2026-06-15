@@ -27,7 +27,9 @@ interface Props {
 
 ## Dados exibidos no resumo do paciente
 
-- CPF · Telefone · Especialidade · Pagamento
+Grid de 3 colunas: **CPF · Telefone · Especialidade**
+
+O campo **Pagamento** aparece como 4ª célula **apenas se `paciente.data_consulta` estiver preenchido** — atendimentos rápidos (dúvidas sem consulta agendada) não exibem pagamento.
 
 ## Design da timeline
 

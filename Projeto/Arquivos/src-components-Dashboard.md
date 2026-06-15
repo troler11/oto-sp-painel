@@ -23,26 +23,40 @@ interface Props {
 | `concluidos` | status `AGENDADO` ou `FINALIZADO` |
 | `cancelados` | status `CANCELADO` |
 | `finalizados` | status `FINALIZADO` |
-| `particulares` | concluídos com pagamento contendo "particular" ou "pix" |
+| `consultasAgendadas` | AGENDADO/FINALIZADO **com** `data_consulta` **e** `pagamento` preenchidos |
+| `particulares` | `consultasAgendadas` com pagamento "particular" ou "pix" |
+| `conveniosCount` | `consultasAgendadas` sem particular/pix |
+| `totalPag` | `consultasAgendadas.length` (base dos percentuais de pagamento) |
 | `receitaRealizada` | `particulares × R$ 600` |
 | `taxaCancelamento` | `cancelados / total × 100` |
 | `mediaEsperaMin` | média de `(data_atualizacao - data_criacao)` em minutos |
 | `taxaConversaoFunil` | `concluidos / (total + leads) × 100` |
-| `previsaoFaturacao` | agendados futuros particulares × R$ 600 |
-| `taxaNoShow` | cancelados que tinham `data_consulta` / (concluidos + esses cancelados) |
+| `agendadosFuturos` | AGENDADO + `data_consulta` + particular/pix |
+| `previsaoFaturacao` | `agendadosFuturos × R$ 600` |
+| `taxaNoShow` | cancelados com `data_consulta` / (concluídos + esses cancelados) |
+| `emAgendamento` | status `AGENDADO` (todos, independente de data) |
+| `finalizadosViaConsulta` | FINALIZADO **com** `data_consulta` — via agendamento formal |
+| `finalizadosDireto` | FINALIZADO **sem** `data_consulta` — atendimento rápido/dúvida |
 | `rankingAtendentes` | agendamentos por `atendente_nome`, ordenado desc |
-| `rankingLoyalty` | top 5 médicos por total de atendimentos |
+| `rankingLoyalty` | top 5 médicos por total (exclui 'a confirmar', 'qualquer', 'indiferente') |
 | `motivosCancelamento` | até 4 cancelados com `observacoes` |
 | `evolucaoDiaria` | contagem de criações por dia nos últimos 14 dias |
+
+## Regra crítica de filtro
+
+Qualquer métrica que deva aplicar-se **apenas a consultas reais** (agendadas) deve usar `consultasAgendadas` como base, ou incluir `&& a.data_consulta && a.pagamento` no filtro. Atendimentos rápidos/dúvidas têm `data_consulta = null` e não devem contaminar estatísticas de pagamento nem médicos.
 
 ## Seções do dashboard
 
 1. **KPIs principais** — SLA de Espera · Conversão · Receita Realizada · Previsão 30d
 2. **Análise de tipo** — Novos vs Retornos · Demográfico (titular vs terceiro)
-3. **Funil de atendimento** — barras por status
-4. **Unidades** — distribuição Olímpia vs Tatuapé
-5. **Formas de pagamento** — Particular vs Convênio
-6. **Evolução diária** — barras dos últimos 14 dias
-7. **Ranking de atendentes** — barras com percentual relativo ao primeiro
-8. **Loyalty médicos** — top 5 médicos com breakdown novos/retornos
-9. **Análise de cancelamentos** — motivos listados em cards vermelhos
+3. **Funil de Conversão** — topo comum (Contactos → Triados), depois **bifurcação**:
+   - *Via Agendamento*: Em Agendamento → Consulta Realizada (fundo verde)
+   - *Atendimento Rápido*: Dúvida/Orientação → Finalizado Direto (fundo índigo)
+4. **Distribuição por Unidade** — barras Olímpia vs Tatuapé
+5. **Formas de Pagamento** — Particular/PIX vs Convênio (só consultas com `data_consulta`)
+6. **Fidelização** — donut Novos vs Retornos
+7. **Evolução diária** — barras dos últimos 14 dias
+8. **Ranking de Médicos** — top 5 com breakdown novos/retornos
+9. **Ranking de Atendentes** — barras com percentual relativo ao primeiro
+10. **Análise de cancelamentos** — motivos listados em cards vermelhos
