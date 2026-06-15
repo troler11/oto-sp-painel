@@ -9,7 +9,13 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const concluidos = agendamentos.filter(a => ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento)).length;
   const cancelados = agendamentos.filter(a => a.status_atendimento === 'CANCELADO').length;
   const finalizados = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length;
-  const particulares = agendamentos.filter(a => ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento) && a.data_consulta && (a.pagamento?.toLowerCase().includes('particular') || a.pagamento?.toLowerCase().includes('pix'))).length;
+  // Apenas consultas com data e pagamento preenchidos
+  const consultasAgendadas = agendamentos.filter(a =>
+    ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento) && a.data_consulta && a.pagamento
+  );
+  const particulares = consultasAgendadas.filter(a =>
+    a.pagamento!.toLowerCase().includes('particular') || a.pagamento!.toLowerCase().includes('pix')
+  ).length;
   const receitaRealizada = particulares * 600;
   const taxaCancelamento = totalAtendimentos > 0 ? Math.round((cancelados / totalAtendimentos) * 100) : 0;
 
@@ -47,9 +53,10 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const uniTatuape = agendamentos.filter(a => a.unidade?.toLowerCase().includes('tatuap')).length;
   const totalUni = uniOlimpia + uniTatuape || 1;
 
-  const totalComConsulta = agendamentos.filter(a => ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento) && a.data_consulta).length;
-  const conveniosCount = totalComConsulta - particulares;
-  const totalPag = totalComConsulta || 1;
+  const conveniosCount = consultasAgendadas.filter(a =>
+    !a.pagamento!.toLowerCase().includes('particular') && !a.pagamento!.toLowerCase().includes('pix')
+  ).length;
+  const totalPag = consultasAgendadas.length || 1;
 
   const atendentes: Record<string, number> = {};
   agendamentos.forEach(a => { if (a.atendente_nome && a.status_atendimento !== 'PENDENTE') { atendentes[a.atendente_nome] = (atendentes[a.atendente_nome] || 0) + 1; } });
