@@ -35,7 +35,9 @@ function useTimerVivo(dataCriacao: string, ativo: boolean) {
 export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline }: Props) {
   const { sessao } = useApp();
   const podeEditar = sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
-  const medicoExibir = (['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.medico_final) ? item.medico_final : (item.nome_medico || '');
+  const MEDICO_IGNORAR = ['qualquer', 'indiferente', 'a confirmar'];
+  const medicoRaw = (['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.medico_final) ? item.medico_final : (item.nome_medico || '');
+  const medicoExibir = MEDICO_IGNORAR.includes(medicoRaw.toLowerCase()) ? '' : medicoRaw;
   const urgencia = getUrgencia(item.data_criacao);
   const isPendente = item.status_atendimento === 'PENDENTE';
   const timerVivo = useTimerVivo(item.data_criacao, isPendente);

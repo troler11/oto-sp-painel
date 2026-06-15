@@ -322,7 +322,7 @@ export default function App() {
   const iniciarAgendamento = (paciente: Agendamento, isEdicao = false) => {
     setPacienteSelecionado(paciente);
     if (isEdicao) { setMedicoSelecionado(paciente.medico_final || ''); setDataSelecionada(paciente.data_consulta ? paciente.data_consulta.split('T')[0] : ''); setHoraSelecionada(paciente.hora_consulta ? paciente.hora_consulta.substring(0, 5) : ''); }
-    else { const mp = paciente.nome_medico && !['Qualquer', 'Indiferente'].includes(paciente.nome_medico) ? paciente.nome_medico : ''; setMedicoSelecionado(mp); setDataSelecionada(''); setHoraSelecionada(''); }
+    else { const mp = paciente.nome_medico && !['Qualquer', 'Indiferente', 'A confirmar'].includes(paciente.nome_medico) ? paciente.nome_medico : ''; setMedicoSelecionado(mp); setDataSelecionada(''); setHoraSelecionada(''); }
     setModalAberto(true);
   };
 
