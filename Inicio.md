@@ -8,23 +8,47 @@ Sistema de gestão para clínica de otorrinolaringologia.
 
 ## Navegação
 
-- [[Projeto/Visao Geral]] — arquitetura e stack
-- [[Configuracao/Variaveis de Ambiente]] — todos os secrets e configurações
-- [[Configuracao/Setup Local]] — como rodar localmente
-- [[API/Endpoints]] — rotas do backend
-- [[Deploy/EasyPanel]] — deploy em produção
+### Projeto
+- [[Projeto/Visao Geral]] — arquitetura, stack e estrutura de pastas
+- [[Projeto/Funcoes Frontend]] — todas as funções React, hooks, utilitários, componentes
+- [[Projeto/Funcoes Backend]] — todas as rotas, middlewares, segurança
 
-## Status
+### Configuração
+- [[Configuracao/Variaveis de Ambiente]] — todos os secrets e variáveis
+- [[Configuracao/Setup Local]] — como rodar localmente
+
+### Referência
+- [[API/Endpoints]] — tabela de todas as rotas da API
+
+### Deploy
+- [[Deploy/EasyPanel]] — guia de deploy + erros comuns
+
+### Banco de dados
+- `banco/migrations.sql` — script de criação completa do banco
+
+## Status atual
 
 | Componente | Status |
 |---|---|
-| Backend (Node/Express) | ✅ Produção |
-| Frontend (React 19 + Vite) | ✅ Produção |
-| Auth httpOnly cookie + JWT | ✅ |
+| Backend Node/Express | ✅ |
+| Auth httpOnly cookie + JWT + Refresh Token | ✅ |
 | Socket.io tempo real | ✅ |
-| Drag & Drop kanban | ✅ |
-| Calendário FullCalendar | ✅ |
+| Rate limit + helmet + CORS restrito | ✅ |
+| Auditoria de ações | ✅ |
+| Frontend React 19 + Vite + Tailwind | ✅ |
+| Kanban drag & drop (@dnd-kit) | ✅ |
+| Toast notifications + Confirm modals | ✅ |
+| Skeleton loading | ✅ |
+| Avatar colorido por nome | ✅ |
+| Timer ao vivo nos cards pendentes | ✅ |
+| Timeline do paciente | ✅ |
+| Sidebar colapsável | ✅ |
+| Atalhos de teclado | ✅ |
+| Relatórios & BI | ✅ |
+| Chat WhatsApp integrado | ✅ |
+| Finalizar sem agendar (dúvida rápida) | ✅ |
 
 ## Repositório
 
 - GitHub: https://github.com/troler11/oto-sp-painel
+- Branch principal: `master`
