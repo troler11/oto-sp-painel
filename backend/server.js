@@ -1057,12 +1057,14 @@ app.put('/api/agendar', verificarToken, async (req, res) => {
 app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
   const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
   try {
+    // LIKE '5511997255184%' cobre todos os formatos: bare, @s.whatsapp.net,
+    // -v23-UUID e variantes com dígitos extras gravadas por versões anteriores
     const { rows } = await pool.query(
       `SELECT message, created_at FROM chat_messages
-       WHERE session_id = $1 OR session_id = $2
+       WHERE session_id LIKE $1
        ORDER BY created_at ASC
        LIMIT 200`,
-      [telefoneLimpo, `${telefoneLimpo}@s.whatsapp.net`]
+      [`${telefoneLimpo}%`]
     );
     const formatado = rows.map(r => {
       const msg = r.message;
