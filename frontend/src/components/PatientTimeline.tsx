@@ -59,10 +59,11 @@ export default function PatientTimeline({ paciente, onClose }: Props) {
         </div>
 
         <div className="p-6">
-          <div className="bg-slate-50 rounded-xl p-4 mb-5 grid grid-cols-3 gap-3 text-xs">
+          <div className="bg-slate-50 rounded-xl p-4 mb-5 grid grid-cols-2 gap-3 text-xs">
             <div><p className="text-slate-400 font-bold uppercase tracking-wider mb-0.5">CPF</p><p className="font-bold text-slate-700">{paciente.cpf_paciente || '—'}</p></div>
             <div><p className="text-slate-400 font-bold uppercase tracking-wider mb-0.5">Telefone</p><p className="font-bold text-slate-700">{paciente.telefone}</p></div>
             <div><p className="text-slate-400 font-bold uppercase tracking-wider mb-0.5">Especialidade</p><p className="font-bold text-slate-700">{paciente.especialidade || '—'}</p></div>
+            {paciente.data_consulta && <div><p className="text-slate-400 font-bold uppercase tracking-wider mb-0.5">Pagamento</p><p className="font-bold text-slate-700">{paciente.pagamento}</p></div>}
           </div>
 
           <div className="relative">

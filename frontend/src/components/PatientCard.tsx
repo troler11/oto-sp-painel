@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle2, Clock, MessageSquare, User, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History } from 'lucide-react';
+import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History } from 'lucide-react';
 import type { Agendamento } from '../types';
 import { formatarDataBr, formatarHoraBr, formatarHora, getUrgencia, getAvatarCor } from '../utils/helpers';
 import { useApp } from '../context/AppContext';
@@ -134,6 +134,7 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
         {item.periodo_atendimento && <div className="flex items-center gap-2 text-slate-700"><SunMedium size={13} className="text-amber-500" /><span className="font-semibold">{item.periodo_atendimento}</span></div>}
         {medicoExibir && <div className="flex items-center gap-2 text-slate-700"><Stethoscope size={13} className="text-blue-500" /><span className="font-semibold">{medicoExibir}</span></div>}
         <div className="flex items-center gap-2 text-slate-700"><MapPin size={13} className="text-slate-400" /><span className="font-semibold">{item.unidade}</span></div>
+        {item.data_consulta && item.pagamento && <div className="flex items-center gap-2 text-slate-700"><CreditCard size={13} className="text-slate-400" /><span className="font-semibold">{item.pagamento}</span></div>}
       </div>
 
       <div className="space-y-2 mt-auto">
