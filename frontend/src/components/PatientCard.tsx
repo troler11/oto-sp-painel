@@ -159,6 +159,10 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
               className={`w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${podeEditar ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
               <RefreshCw size={13} /> Devolver à Fila
             </button>
+            <button disabled={!podeEditar} onClick={() => podeEditar && onFinalizar(item.id)}
+              className={`w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${podeEditar ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+              <CheckCircle2 size={16} /> Finalizar Atendimento
+            </button>
           </div>
         )}
         {item.status_atendimento === 'AGENDADO' && (
