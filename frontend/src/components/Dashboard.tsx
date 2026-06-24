@@ -53,7 +53,12 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const totalPag = consultasAgendadas.length || 1;
 
   const atendentes: Record<string, number> = {};
-  agendamentos.forEach(a => { if (a.atendente_nome && a.status_atendimento !== 'PENDENTE') { atendentes[a.atendente_nome] = (atendentes[a.atendente_nome] || 0) + 1; } });
+  const ATENDENTES_EXCLUIR = ['ia', 'bot', 'robô', 'robo'];
+  agendamentos.forEach(a => {
+    if (a.atendente_nome && a.status_atendimento !== 'PENDENTE' && !ATENDENTES_EXCLUIR.includes(a.atendente_nome.toLowerCase())) {
+      atendentes[a.atendente_nome] = (atendentes[a.atendente_nome] || 0) + 1;
+    }
+  });
   const rankingAtendentes = Object.entries(atendentes).sort((a, b) => b[1] - a[1]);
   const maxAtendimentos = rankingAtendentes[0]?.[1] || 1;
 
