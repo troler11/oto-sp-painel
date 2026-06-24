@@ -34,7 +34,7 @@ function useTimerVivo(dataCriacao: string, ativo: boolean) {
 
 export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline }: Props) {
   const { sessao } = useApp();
-  const podeEditar = sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
+  const podeEditar = item.status_atendimento === 'AGENDADO' || sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const MEDICO_IGNORAR = ['qualquer', 'indiferente', 'a confirmar'];
   const medicoRaw = (['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.medico_final) ? item.medico_final : (item.nome_medico || '');
   const medicoExibir = MEDICO_IGNORAR.includes(medicoRaw.toLowerCase()) ? '' : medicoRaw;
@@ -188,7 +188,12 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
         )}
         {item.status_atendimento === 'FINALIZADO' && (
           <button onClick={() => onChat(item)} className="w-full bg-slate-100 text-slate-600 hover:bg-slate-200 py-3 rounded-xl text-sm font-bold flex justify-center gap-2 transition-colors">
-            <MessageSquare size={17} /> Ver Histórico
+            <MessageSquare size={17} /> Enviar Mensagem
+          </button>
+        )}
+        {item.status_atendimento === 'CANCELADO' && (
+          <button onClick={() => onChat(item)} className="w-full bg-slate-100 text-slate-600 hover:bg-slate-200 py-3 rounded-xl text-sm font-bold flex justify-center gap-2 transition-colors">
+            <MessageSquare size={17} /> Enviar Mensagem
           </button>
         )}
       </div>

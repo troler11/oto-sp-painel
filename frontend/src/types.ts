@@ -1,5 +1,5 @@
-export interface Sessao { user: { email: string; nome: string; papel: string }; }
-export interface Usuario { id: number; nome: string; email: string; papel: string; }
+export interface Sessao { user: { email?: string; nome: string; usuario?: string; papel: string }; }
+export interface Usuario { id: number; nome: string; usuario?: string; papel: string; }
 export interface ModeloMensagem { id: number; titulo: string; texto: string; }
 export interface Medico {
   id: number; nome: string; unidade: string;

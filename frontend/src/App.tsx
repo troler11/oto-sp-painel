@@ -107,7 +107,7 @@ export default function App() {
   const [motivoCancelamento, setMotivoCancelamento] = useState('');
 
   const [modalNovoUsuarioAberto, setModalNovoUsuarioAberto] = useState(false);
-  const [novoUsuarioForm, setNovoUsuarioForm] = useState({ nome: '', email: '', senha: '', papel: 'recepcao' });
+  const [novoUsuarioForm, setNovoUsuarioForm] = useState({ nome: '', usuario: '', senha: '', papel: 'recepcao' });
   const [msgNovoUsuario, setMsgNovoUsuario] = useState({ texto: '', tipo: '' });
 
   const [modalGestaoUsuariosAberto, setModalGestaoUsuariosAberto] = useState(false);
@@ -254,7 +254,8 @@ export default function App() {
     if (!tel) { toast('Sem número de contacto válido.', 'erro'); return; }
     const ag = paciente as Agendamento;
     const isAdminOrManager = sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
-    const bloquearEnvio = isLead ? false : (Boolean(ag.atendente_nome) && ag.atendente_nome !== sessao?.user.nome && !isAdminOrManager);
+    const isConcluido = ['FINALIZADO', 'CANCELADO'].includes(ag.status_atendimento);
+    const bloquearEnvio = isLead ? false : (!isConcluido && Boolean(ag.atendente_nome) && ag.atendente_nome !== sessao?.user.nome && !isAdminOrManager);
     setPacienteAtivoChat({ telefone: tel, nome_paciente: isLead ? (paciente as Lead).nome_titular : ag.nome_paciente, bloquearEnvio });
     setChatAberto(true);
     try {
@@ -379,7 +380,7 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro);
       setMsgNovoUsuario({ texto: data.mensagem, tipo: 'sucesso' });
-      setTimeout(() => { setModalNovoUsuarioAberto(false); setNovoUsuarioForm({ nome: '', email: '', senha: '', papel: 'recepcao' }); setMsgNovoUsuario({ texto: '', tipo: '' }); }, 2000);
+      setTimeout(() => { setModalNovoUsuarioAberto(false); setNovoUsuarioForm({ nome: '', usuario: '', senha: '', papel: 'recepcao' }); setMsgNovoUsuario({ texto: '', tipo: '' }); }, 2000);
     } catch (err: any) { setMsgNovoUsuario({ texto: err.message, tipo: 'erro' }); }
   };
 
@@ -487,8 +488,8 @@ export default function App() {
           <form onSubmit={fazerLogin} className="space-y-4">
             {erroAuth && <div className="bg-red-500/10 text-red-400 p-3 rounded-xl text-sm flex items-center gap-2 border border-red-500/20"><AlertCircle size={16} /> {erroAuth}</div>}
             <div>
-              <label className="text-sm font-bold text-slate-300 block mb-1.5">E-mail</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-white/10 border border-white/20 text-white rounded-xl p-3.5 outline-none focus:border-[#11caa0] placeholder-slate-500 transition-colors" placeholder="recepcao@clinica.com" />
+              <label className="text-sm font-bold text-slate-300 block mb-1.5">Usuário</label>
+              <input type="text" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-white/10 border border-white/20 text-white rounded-xl p-3.5 outline-none focus:border-[#11caa0] placeholder-slate-500 transition-colors" placeholder="nome de usuário" />
             </div>
             <div>
               <label className="text-sm font-bold text-slate-300 block mb-1.5">Senha</label>
@@ -522,11 +523,12 @@ export default function App() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-800 leading-tight">{lead.nome_titular || lead.telefone}</h3>
+                {!isTriage && lead.nome_titular && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
+                {!isTriage && lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{tempoAtras(lead.ultima_mensagem)}</p>
               </div>
             </div>
             {isTriage && <span className={`px-2 py-1 rounded-lg text-[9px] font-extrabold uppercase tracking-wider ${lead.status_robo === 'Robô' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}`}>{lead.status_robo === 'Robô' ? '🤖 Bot' : '👤 Pausado'}</span>}
-            {!isTriage && <p className="text-[10px] text-slate-400">CPF: {lead.cpf_titular || '—'}</p>}
           </div>
           <div className="mt-auto pt-3 border-t border-slate-100 flex flex-col gap-2">
             <button onClick={() => carregarChat(lead, true)} className={`w-full ${isTriage ? 'bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700' : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700'} py-2.5 rounded-xl flex justify-center items-center gap-2 transition-colors font-bold text-xs`}>
@@ -558,20 +560,14 @@ export default function App() {
       );
     }
 
-    const lista = filtrosAg.filter(a => {
-      if (filtro === 'EM ATENDIMENTO') {
-        const isManager = ['admin', 'gerente'].includes(sessao.user.papel);
-        return a.status_atendimento === filtro && (isManager || a.atendente_nome === sessao.user.nome);
-      }
-      return a.status_atendimento === filtro;
-    });
+    const lista = filtrosAg.filter(a => a.status_atendimento === filtro);
 
     if (primeiraCarregamento) return <CardSkeletonGrid count={6} />;
 
     if (!lista.length) return (
       <div className="col-span-full py-20 text-center">
         <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-slate-300" /></div>
-        <p className="text-slate-500 font-bold">{filtro === 'EM ATENDIMENTO' ? 'Nenhum paciente em atendimento consigo.' : 'Sem registos nesta fila.'}</p>
+        <p className="text-slate-500 font-bold">Sem registos nesta fila.</p>
       </div>
     );
 
@@ -631,7 +627,7 @@ export default function App() {
             )}
 
             {filtro === 'RELATORIOS' ? (
-              <Dashboard agendamentos={filtrosAg} leads={filtrosLeads} />
+              <Dashboard agendamentos={agendamentos} leads={leads} />
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={filtrosAg.map(a => String(a.id))} strategy={verticalListSortingStrategy}>

@@ -1,4 +1,4 @@
-import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, PieChart, Users, Target, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
+import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, Users, Target, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
 import type { Agendamento, Lead } from '../types';
 import { formatarDataBr, formatarHora } from '../utils/helpers';
 
@@ -41,10 +41,6 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const finalizadosViaConsulta = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && a.data_consulta).length;
   const finalizadosDireto = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && !a.data_consulta).length;
 
-  const novosCount = agendamentos.filter(a => a.tipo_consulta?.toLowerCase().includes('agendamento') || a.tipo_consulta?.toLowerCase().includes('consulta')).length;
-  const retornosCount = agendamentos.filter(a => a.tipo_consulta?.toLowerCase().includes('retorno')).length;
-  const totalRetencao = novosCount + retornosCount || 1;
-
   const terceiros = agendamentos.filter(a => a.para_terceiro === true).length;
   const titulares = agendamentos.filter(a => a.para_terceiro === false).length;
   const totalDemografico = terceiros + titulares || 1;
@@ -77,10 +73,14 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const motivosCancelamento = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.observacoes).slice(0, 4);
 
   const hoje = new Date();
+  const toLocalDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const evolucaoDiaria = Array.from({ length: 14 }, (_, i) => {
     const d = new Date(hoje); d.setDate(hoje.getDate() - (13 - i));
-    const ds = d.toISOString().split('T')[0];
-    const qtd = agendamentos.filter(a => a.data_criacao?.split('T')[0] === ds).length;
+    const ds = toLocalDateStr(d);
+    const qtd = agendamentos.filter(a => {
+      if (!a.data_criacao) return false;
+      return toLocalDateStr(new Date(a.data_criacao)) === ds;
+    }).length;
     return { dia: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), qtd };
   });
   const maxEvol = Math.max(...evolucaoDiaria.map(e => e.qtd), 1);
@@ -256,7 +256,7 @@ export default function Dashboard({ agendamentos, leads }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* PAGAMENTOS */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <h3 className="text-sm font-extrabold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
@@ -277,36 +277,6 @@ export default function Dashboard({ agendamentos, leads }: Props) {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* FIDELIZAÇÃO */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
-          <h3 className="text-sm font-extrabold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
-            <PieChart size={18} className="text-[#11caa0]" /> Fidelização
-          </h3>
-          <div className="flex-1 flex items-center justify-center gap-6">
-            <div className="relative w-28 h-28 rounded-full shrink-0"
-              style={{ background: `conic-gradient(#11caa0 0% ${(retornosCount / totalRetencao) * 100}%, #6366f1 ${(retornosCount / totalRetencao) * 100}% 100%)` }}>
-              <div className="absolute inset-3 bg-white rounded-full flex flex-col items-center justify-center">
-                <span className="font-extrabold text-slate-800 text-lg">{Math.round((retornosCount / totalRetencao) * 100)}%</span>
-                <span className="text-[9px] text-slate-500 font-bold">Retorno</span>
-              </div>
-            </div>
-            <div className="space-y-3">
-              {[
-                { cor: 'bg-indigo-500', label: `${novosCount} Novos`, pct: Math.round((novosCount / totalRetencao) * 100) },
-                { cor: 'bg-[#11caa0]', label: `${retornosCount} Retornos`, pct: Math.round((retornosCount / totalRetencao) * 100) },
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${item.cor} shrink-0`} />
-                  <div>
-                    <p className="text-xs font-extrabold text-slate-700">{item.label}</p>
-                    <p className="text-[10px] text-slate-400">{item.pct}%</p>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 

@@ -240,6 +240,10 @@ const criarTabelasExtras = async () => {
       )
     `);
 
+    // Adiciona coluna 'usuario' (login) se ainda não existir
+    await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS usuario VARCHAR(100)`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios (usuario) WHERE usuario IS NOT NULL`);
+
     logger.info('Tabelas de auditoria e refresh tokens verificadas.');
   } catch (e) {
     logger.error('Erro ao criar tabelas extras', { error: e.message });
@@ -394,21 +398,21 @@ app.get('/api/health', (req, res) => {
 app.post('/api/login', loginLimiter, async (req, res) => {
   const { email, senha } = req.body;
 
-  if (!validar.email(email) || !validar.minLen(senha, 1)) {
-    return res.status(400).json({ erro: 'E-mail ou senha inválidos.' });
+  if (!validar.minLen(email, 1) || !validar.minLen(senha, 1)) {
+    return res.status(400).json({ erro: 'Usuário ou senha inválidos.' });
   }
 
   try {
-    const { rows } = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT * FROM usuarios WHERE usuario = $1 OR email = $1 OR nome = $1', [email]);
     if (rows.length === 0) return res.status(401).json({ erro: 'Dados incorretos.' });
 
     const usuario = rows[0];
     if (!await bcrypt.compare(senha, usuario.senha_hash)) {
-      logger.warn('Tentativa de login falhada', { email, ip: req.ip });
+      logger.warn('Tentativa de login falhada', { login: email, ip: req.ip });
       return res.status(401).json({ erro: 'Dados incorretos.' });
     }
 
-    const payload = { id: usuario.id, email: usuario.email, nome: usuario.nome, papel: usuario.papel };
+    const payload = { id: usuario.id, email: usuario.email, nome: usuario.nome, usuario: usuario.usuario, papel: usuario.papel };
 
     // Access token: 12h
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
@@ -433,7 +437,7 @@ app.post('/api/login', loginLimiter, async (req, res) => {
     res.cookie('token', token, { ...cookieBase, maxAge: 12 * 60 * 60 * 1000 });
     res.cookie('refresh_token', refreshToken, { ...cookieBase, maxAge: 7 * 24 * 60 * 60 * 1000, path: '/api/refresh-token' });
 
-    res.json({ usuario: { email: usuario.email, nome: usuario.nome, papel: usuario.papel } });
+    res.json({ usuario: { email: usuario.email, nome: usuario.nome, usuario: usuario.usuario, papel: usuario.papel } });
   } catch (err) {
     logger.error('Erro no login', { error: err.message });
     res.status(500).json({ erro: 'Erro interno.' });
@@ -449,8 +453,8 @@ app.post('/api/refresh-token', async (req, res) => {
 
     // Verifica se o token existe e não foi revogado
     const { rows } = await pool.query(
-      `SELECT rt.*, u.email, u.nome, u.papel 
-       FROM refresh_tokens rt 
+      `SELECT rt.*, u.email, u.nome, u.usuario, u.papel
+       FROM refresh_tokens rt
        JOIN usuarios u ON u.id = rt.usuario_id
        WHERE rt.usuario_id = $1 AND rt.revogado = false AND rt.expira_em > NOW()
        ORDER BY rt.criado_em DESC LIMIT 10`,
@@ -468,7 +472,7 @@ app.post('/api/refresh-token', async (req, res) => {
     if (!tokenValido) return res.status(401).json({ erro: 'Refresh token inválido ou expirado.' });
 
     const novoToken = jwt.sign(
-      { id: tokenValido.usuario_id, email: tokenValido.email, nome: tokenValido.nome, papel: tokenValido.papel },
+      { id: tokenValido.usuario_id, email: tokenValido.email, nome: tokenValido.nome, usuario: tokenValido.usuario, papel: tokenValido.papel },
       JWT_SECRET,
       { expiresIn: '12h' }
     );
@@ -543,30 +547,30 @@ app.post('/api/usuarios', verificarToken, async (req, res) => {
     return res.status(403).json({ erro: 'Acesso negado.' });
   }
 
-  const { nome, email, senha, papel } = req.body;
+  const { nome, usuario, senha, papel } = req.body;
 
-  // Validação robusta
   const erros = [];
-  if (!validar.minLen(nome, 2))    erros.push('Nome deve ter pelo menos 2 caracteres.');
-  if (!validar.email(email))       erros.push('E-mail inválido.');
-  if (!validar.minLen(senha, 6))   erros.push('Senha deve ter pelo menos 6 caracteres.');
+  if (!validar.minLen(nome, 2))      erros.push('Nome deve ter pelo menos 2 caracteres.');
+  if (!validar.minLen(usuario, 2))   erros.push('Usuário deve ter pelo menos 2 caracteres.');
+  if (/\s/.test(usuario))            erros.push('Usuário não pode conter espaços.');
+  if (!validar.minLen(senha, 6))     erros.push('Senha deve ter pelo menos 6 caracteres.');
   if (!['recepcao', 'gerente'].includes(papel)) erros.push('Papel inválido.');
   if (erros.length) return res.status(400).json({ erro: erros.join(' ') });
 
   try {
-    const checkEmail = await pool.query('SELECT id FROM usuarios WHERE email = $1', [email]);
-    if (checkEmail.rows.length > 0) return res.status(400).json({ erro: 'E-mail já em uso.' });
+    const checkUsuario = await pool.query('SELECT id FROM usuarios WHERE usuario = $1', [usuario.toLowerCase().trim()]);
+    if (checkUsuario.rows.length > 0) return res.status(400).json({ erro: 'Nome de usuário já em uso.' });
 
     const senhaHash = await bcrypt.hash(senha, 12);
     const { rows } = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha_hash, papel) VALUES ($1, $2, $3, $4) RETURNING id',
-      [nome.trim(), email.toLowerCase().trim(), senhaHash, papel]
+      'INSERT INTO usuarios (nome, usuario, senha_hash, papel) VALUES ($1, $2, $3, $4) RETURNING id',
+      [nome.trim(), usuario.toLowerCase().trim(), senhaHash, papel]
     );
 
     await registarAuditoria({
       usuario_id: req.user.id, usuario_nome: req.user.nome,
       acao: 'CRIAR_USUARIO', entidade: 'usuarios', entidade_id: rows[0].id,
-      detalhes: { nome, email, papel }, ip: req.ip
+      detalhes: { nome, usuario, papel }, ip: req.ip
     });
 
     res.json({ sucesso: true, mensagem: 'Conta criada com sucesso!' });
@@ -581,7 +585,7 @@ app.get('/api/usuarios', verificarToken, async (req, res) => {
     return res.status(403).json({ erro: 'Acesso negado.' });
   }
   try {
-    const { rows } = await pool.query('SELECT id, nome, email, papel FROM usuarios ORDER BY nome ASC');
+    const { rows } = await pool.query('SELECT id, nome, usuario, papel FROM usuarios ORDER BY nome ASC');
     res.json(rows);
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao buscar utilizadores.' });

@@ -41,7 +41,7 @@ export default function UserManagementModal({ usuarios, editandoSenhaId, setEdit
                   ) : (
                     <p className="font-extrabold text-slate-800 text-sm">{u.nome}</p>
                   )}
-                  <p className="text-xs text-slate-500 mt-0.5">{u.email}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-mono">@{u.usuario || '—'}</p>
                   <span className="inline-block mt-1 text-[9px] uppercase font-extrabold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 tracking-wider">{u.papel}</span>
                 </div>
               </div>
@@ -58,7 +58,7 @@ export default function UserManagementModal({ usuarios, editandoSenhaId, setEdit
                       className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors"><Edit2 size={15} /></button>
                     <button onClick={() => { setEditandoSenhaId(u.id); setNovaSenha(''); setEditandoUsuarioId(null); }}
                       className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-[#11caa0] transition-colors"><Key size={15} /></button>
-                    {sessao?.user.email !== u.email && (
+                    {sessao?.user.nome !== u.nome && (
                       <button onClick={() => onExcluir(u.id)} className="p-2 bg-white border border-red-100 rounded-lg text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={15} /></button>
                     )}
                   </>
