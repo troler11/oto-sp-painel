@@ -329,7 +329,6 @@ export default function Dashboard({ agendamentos, leads }: Props) {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-extrabold text-slate-800">{s.total}</p>
-                    <p className="text-[10px] text-slate-400">{s.novos}N · {s.retornos}R</p>
                   </div>
                 </div>
               ))}
