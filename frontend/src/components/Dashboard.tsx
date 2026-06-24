@@ -21,9 +21,9 @@ export default function Dashboard({ agendamentos, leads }: Props) {
 
   let totalEsperaMs = 0, itensComEspera = 0;
   agendamentos.forEach(a => {
-    if (a.atendente_nome && a.data_atualizacao && a.data_criacao) {
-      const espera = new Date(a.data_atualizacao).getTime() - new Date(a.data_criacao).getTime();
-      if (espera > 0) { totalEsperaMs += espera; itensComEspera++; }
+    if (a.data_atendimento && a.data_criacao) {
+      const espera = new Date(a.data_atendimento).getTime() - new Date(a.data_criacao).getTime();
+      if (espera > 0 && espera < 24 * 60 * 60 * 1000) { totalEsperaMs += espera; itensComEspera++; }
     }
   });
   const mediaEsperaMin = itensComEspera > 0 ? Math.round((totalEsperaMs / itensComEspera) / 60000) : 0;
