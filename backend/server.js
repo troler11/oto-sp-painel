@@ -245,6 +245,8 @@ const criarTabelasExtras = async () => {
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios (usuario) WHERE usuario IS NOT NULL`);
     // Remove restrição NOT NULL do email (campo opcional nas novas contas)
     await pool.query(`ALTER TABLE usuarios ALTER COLUMN email DROP NOT NULL`);
+    // Resincroniza o sequence do id caso tenha sido inserido manualmente
+    await pool.query(`SELECT setval(pg_get_serial_sequence('usuarios', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM usuarios`);
 
     logger.info('Tabelas de auditoria e refresh tokens verificadas.');
   } catch (e) {
