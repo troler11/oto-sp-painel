@@ -34,7 +34,7 @@ function useTimerVivo(dataCriacao: string, ativo: boolean) {
 
 export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline }: Props) {
   const { sessao } = useApp();
-  const podeEditar = item.status_atendimento === 'AGENDADO' || sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
+  const podeEditar = ['AGENDADO', 'EM ATENDIMENTO'].includes(item.status_atendimento) || sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const MEDICO_IGNORAR = ['qualquer', 'indiferente', 'a confirmar'];
   const medicoRaw = (['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.medico_final) ? item.medico_final : (item.nome_medico || '');
   const medicoExibir = MEDICO_IGNORAR.includes(medicoRaw.toLowerCase()) ? '' : medicoRaw;
