@@ -129,14 +129,19 @@ export default function Dashboard({ agendamentos, leads }: Props) {
         <h3 className="text-sm font-extrabold text-slate-800 mb-5 flex items-center gap-2 uppercase tracking-wider">
           <BarChart2 size={18} className="text-[#11caa0]" /> Evolução dos Últimos 14 Dias
         </h3>
-        <div className="flex items-end gap-1.5 h-32">
+        <div className="flex items-end gap-1.5 mb-2" style={{ height: 96 }}>
           {evolucaoDiaria.map((item, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-              <span className="text-[10px] text-slate-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity">{item.qtd}</span>
+            <div key={i} className="flex-1 flex flex-col items-center justify-end group" style={{ height: 96 }}>
+              <span className="text-[10px] text-slate-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity mb-0.5">{item.qtd}</span>
               <div className="w-full bg-gradient-to-t from-[#11caa0] to-[#11caa0]/60 rounded-t-md transition-all hover:from-[#005088] hover:to-[#005088]/60 cursor-pointer"
-                style={{ height: `${Math.max((item.qtd / maxEvol) * 100, 4)}%` }} title={`${item.dia}: ${item.qtd} atendimentos`} />
-              <span className="text-[9px] text-slate-400 font-medium">{item.dia}</span>
+                style={{ height: Math.max((item.qtd / maxEvol) * 80, item.qtd > 0 ? 4 : 0) }}
+                title={`${item.dia}: ${item.qtd} atendimentos`} />
             </div>
+          ))}
+        </div>
+        <div className="flex gap-1.5">
+          {evolucaoDiaria.map((item, i) => (
+            <span key={i} className="flex-1 text-center text-[9px] text-slate-400 font-medium">{item.dia}</span>
           ))}
         </div>
       </div>
