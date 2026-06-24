@@ -59,7 +59,7 @@ export default function Dashboard({ agendamentos, leads }: Props) {
 
   const medicosData: Record<string, { total: number; retornos: number; novos: number }> = {};
   agendamentos.forEach(a => {
-    const med = a.medico_final || a.nome_medico;
+    const med = a.medico_final;
     if (med && !['indiferente', 'qualquer', 'a confirmar'].includes(med.toLowerCase())) {
       if (!medicosData[med]) medicosData[med] = { total: 0, retornos: 0, novos: 0 };
       medicosData[med].total++;
