@@ -243,6 +243,8 @@ const criarTabelasExtras = async () => {
     // Adiciona coluna 'usuario' (login) se ainda não existir
     await pool.query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS usuario VARCHAR(100)`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_usuario ON usuarios (usuario) WHERE usuario IS NOT NULL`);
+    // Remove restrição NOT NULL do email (campo opcional nas novas contas)
+    await pool.query(`ALTER TABLE usuarios ALTER COLUMN email DROP NOT NULL`);
 
     logger.info('Tabelas de auditoria e refresh tokens verificadas.');
   } catch (e) {
