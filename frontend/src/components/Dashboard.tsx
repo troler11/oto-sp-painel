@@ -1,4 +1,4 @@
-import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, Users, Target, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
+import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, Users, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
 import type { Agendamento, Lead } from '../types';
 import { formatarDataBr, formatarHora } from '../utils/helpers';
 
@@ -33,8 +33,6 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const agendadosFuturos = agendamentos.filter(a => a.status_atendimento === 'AGENDADO' && a.data_consulta && a.pagamento?.toLowerCase().includes('particular')).length;
   const previsaoFaturacao = agendadosFuturos * 600;
 
-  const noShowCount = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta).length;
-  const taxaNoShow = concluidos > 0 ? Math.round((noShowCount / (concluidos + noShowCount)) * 100) : 0;
 
   // Separação dos dois caminhos de atendimento
   const emAgendamento = agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length;
@@ -115,7 +113,6 @@ export default function Dashboard({ agendamentos, leads }: Props) {
           { label: 'Total Fichas', valor: totalAtendimentos, icon: <FileText size={18} />, cor: 'text-slate-600', bg: 'bg-slate-100' },
           { label: 'Finalizados', valor: finalizados, icon: <CheckCircle2 size={18} />, cor: 'text-emerald-700', bg: 'bg-emerald-100' },
           { label: 'Cancelamentos', valor: cancelados, icon: <XCircle size={18} />, cor: 'text-red-700', bg: 'bg-red-100' },
-          { label: 'Taxa No-Show', valor: `${taxaNoShow}%`, icon: <AlertCircle size={18} />, cor: 'text-orange-700', bg: 'bg-orange-100' },
         ].map((k, i) => (
           <div key={i} className="bg-white rounded-xl p-4 border border-slate-200 flex items-center gap-3">
             <div className={`${k.bg} ${k.cor} p-2.5 rounded-lg`}>{k.icon}</div>
