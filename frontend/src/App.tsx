@@ -9,7 +9,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import {
   Activity, CheckCircle2, XCircle, CalendarDays, X,
-  AlertCircle, Target, ArrowRight, MessageSquare, Trash2,
+  AlertCircle, Target, ArrowRight, MessageSquare, Trash2, Download,
 } from 'lucide-react';
 
 import { AppContext } from './context/AppContext';
@@ -509,6 +509,27 @@ export default function App() {
   const filtrosLeads = aplicarFiltros(leads, true);
   const filtrosAg = aplicarFiltros(agendamentos);
 
+  const exportarLeadsCSV = () => {
+    const BOM = '﻿';
+    const headers = ['Nome', 'Telefone', 'CPF', 'Status Bot', 'Última Mensagem', 'Data Cadastro'];
+    const rows = filtrosLeads.map(lead => [
+      lead.nome_atendimento || lead.nome_titular || lead.telefone,
+      lead.telefone,
+      lead.cpf_titular || '',
+      lead.status_robo,
+      lead.ultima_mensagem ? new Date(lead.ultima_mensagem).toLocaleString('pt-BR') : '',
+      lead.data_cadastro ? new Date(lead.data_cadastro).toLocaleDateString('pt-BR') : '',
+    ]);
+    const csv = BOM + [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `leads_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const renderKanban = () => {
     if (filtro === 'TRIAGEM' || filtro === 'LEADS') {
       const lista = filtrosLeads;
@@ -623,6 +644,15 @@ export default function App() {
                     {(contagens[aba] ?? 0) > 0 && <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filtro === aba ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagens[aba]}</span>}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {filtro === 'LEADS' && (
+              <div className="flex justify-between items-center mb-5">
+                <p className="text-sm font-bold text-slate-500">{filtrosLeads.length} leads encontrados</p>
+                <button onClick={exportarLeadsCSV} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm">
+                  <Download size={15} /> Exportar Excel
+                </button>
               </div>
             )}
 
