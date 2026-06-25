@@ -960,6 +960,22 @@ app.put('/api/status', verificarToken, async (req, res) => {
 
     const { rows: agendados } = await pool.query(query, params);
 
+    // Assumir ficha → pausa o bot para a equipe poder conversar
+    if (status === 'EM ATENDIMENTO' && agendados.length > 0) {
+      await pool.query(
+        `UPDATE contatos_whatsapp SET status_robo = 'Humano' WHERE id = $1`,
+        [agendados[0].contato_id]
+      );
+    }
+
+    // Devolver à fila → reativa o bot
+    if (status === 'PENDENTE' && agendados.length > 0) {
+      await pool.query(
+        `UPDATE contatos_whatsapp SET status_robo = 'Robô' WHERE id = $1`,
+        [agendados[0].contato_id]
+      );
+    }
+
     // Notificação WhatsApp para cancelamento
     if (status === 'CANCELADO' && agendados.length > 0) {
       const ag = agendados[0];
