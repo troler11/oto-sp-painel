@@ -125,9 +125,11 @@ export default function App() {
 
   // ── Socket ────────────────────────────────────────────────────
   const socketRef = useRef<Socket | null>(null);
+  const pacienteAtivoChatRef = useRef<PacienteChat | null>(null);
 
   // ── Effects ───────────────────────────────────────────────────
   useEffect(() => { document.title = 'OtoFlow CRM | Gestão de Atendimentos'; }, []);
+  useEffect(() => { pacienteAtivoChatRef.current = pacienteAtivoChat; }, [pacienteAtivoChat]);
 
   useEffect(() => {
     const restaurar = async () => {
@@ -153,7 +155,7 @@ export default function App() {
     });
 
     socket.on('mensagem:nova', (payload: { telefone: string; texto: string }) => {
-      if (pacienteAtivoChat?.telefone === payload.telefone) {
+      if (pacienteAtivoChatRef.current?.telefone === payload.telefone) {
         setMensagens(prev => [...prev, { texto: payload.texto, origem: 'paciente', data: new Date().toISOString() }]);
       } else {
         adicionarNotificacao(`Nova mensagem de ${payload.telefone}`, 'info');
