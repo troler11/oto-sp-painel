@@ -984,7 +984,20 @@ app.put('/api/status', verificarToken, async (req, res) => {
     if (status === 'CANCELADO' && agendados.length > 0) {
       const ag = agendados[0];
       const { rows: contatos } = await pool.query(
-        `UPDATE contatos_whatsapp SET status_robo = 'Robô' WHERE id = $1 RETURNING telefone`,
+        `UPDATE contatos_whatsapp SET
+          status_robo          = 'Robô',
+          sessao_intencao      = 'triagem',
+          sessao_rota          = 0,
+          sessao_atualizada_em = NOW(),
+          coleta_unidade       = '',
+          coleta_data          = '',
+          coleta_periodo       = '',
+          coleta_horario       = '',
+          coleta_convenio      = '',
+          coleta_medico        = '',
+          nome_atendimento     = '',
+          coleta_id_tisaude    = ''
+        WHERE id = $1 RETURNING telefone`,
         [ag.contato_id]
       );
 
@@ -1067,7 +1080,20 @@ app.put('/api/agendar', verificarToken, async (req, res) => {
     if (agendados.length > 0) {
       const ag = agendados[0];
       const { rows: contatos } = await pool.query(
-        `UPDATE contatos_whatsapp SET status_robo='Robô' WHERE id=$1 RETURNING telefone`,
+        `UPDATE contatos_whatsapp SET
+          status_robo          = 'Robô',
+          sessao_intencao      = 'triagem',
+          sessao_rota          = 0,
+          sessao_atualizada_em = NOW(),
+          coleta_unidade       = '',
+          coleta_data          = '',
+          coleta_periodo       = '',
+          coleta_horario       = '',
+          coleta_convenio      = '',
+          coleta_medico        = '',
+          nome_atendimento     = '',
+          coleta_id_tisaude    = ''
+        WHERE id=$1 RETURNING telefone`,
         [ag.contato_id]
       );
 
