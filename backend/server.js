@@ -1295,7 +1295,7 @@ const wahaHeaders = () => {
 };
 
 const apenasAdmin = (req, res, next) => {
-  if (req.user?.papel !== 'admin') return res.status(403).json({ erro: 'Apenas administradores.' });
+  if (!['admin', 'gerente'].includes(req.user?.papel)) return res.status(403).json({ erro: 'Acesso restrito a admin e gerente.' });
   next();
 };
 

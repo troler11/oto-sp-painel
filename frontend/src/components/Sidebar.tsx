@@ -95,7 +95,7 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
             <NavBtn id="__modelos" icon={<FileText size={17} />} label="Modelos" />
             <NavBtn id="__novo_usuario" icon={<UserPlus size={17} />} label="Novo Utilizador" />
             <NavBtn id="__equipe" icon={<ShieldCheck size={17} />} label="Equipe & Acessos" />
-            {sessao?.user.papel === 'admin' && (
+            {(sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente') && (
               <button onClick={() => setModalWahaAberto(true)} title={colapsada ? 'WhatsApp (WAHA)' : undefined}
                 className={`w-full flex items-center ${colapsada ? 'justify-center' : 'gap-2.5'} px-3 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-slate-800/80 hover:text-slate-200 relative group`}>
                 <Wifi size={17} />
