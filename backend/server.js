@@ -838,7 +838,10 @@ app.get('/api/leads', verificarToken, async (req, res) => {
       WHERE NOT EXISTS (
         SELECT 1 FROM agendamentos a
         WHERE a.contato_id = c.id
-        AND a.status_atendimento IN ('AGENDADO', 'FINALIZADO')
+        AND (
+          a.status_atendimento = 'AGENDADO'
+          OR (a.status_atendimento = 'FINALIZADO' AND a.data_consulta IS NOT NULL)
+        )
       )
       ORDER BY c.ultima_mensagem DESC
     `);
