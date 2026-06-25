@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Clock, Zap, CalendarDays, CheckCircle2, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Activity, Clock, Zap, CalendarDays, CheckCircle2, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getAvatarCor } from '../utils/helpers';
 
@@ -12,6 +12,7 @@ interface Props {
   setModalModelosAberto: (v: boolean) => void;
   setModalNovoUsuarioAberto: (v: boolean) => void;
   abrirGestaoUsuarios: () => void;
+  setModalWahaAberto: (v: boolean) => void;
 }
 
 const ABAS_NAV = [
@@ -23,7 +24,7 @@ const ABAS_NAV = [
   { id: 'CANCELADO', icon: <XCircle size={17} />, label: 'Cancelados' },
 ] as const;
 
-export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, fazerLogout, setModalModelosAberto, setModalNovoUsuarioAberto, abrirGestaoUsuarios }: Props) {
+export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, fazerLogout, setModalModelosAberto, setModalNovoUsuarioAberto, abrirGestaoUsuarios, setModalWahaAberto }: Props) {
   const { sessao } = useApp();
   const [colapsada, setColapsada] = useState(false);
   const isAdmin = sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
@@ -94,6 +95,18 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
             <NavBtn id="__modelos" icon={<FileText size={17} />} label="Modelos" />
             <NavBtn id="__novo_usuario" icon={<UserPlus size={17} />} label="Novo Utilizador" />
             <NavBtn id="__equipe" icon={<ShieldCheck size={17} />} label="Equipe & Acessos" />
+            {sessao?.user.papel === 'admin' && (
+              <button onClick={() => setModalWahaAberto(true)} title={colapsada ? 'WhatsApp (WAHA)' : undefined}
+                className={`w-full flex items-center ${colapsada ? 'justify-center' : 'gap-2.5'} px-3 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-slate-800/80 hover:text-slate-200 relative group`}>
+                <Wifi size={17} />
+                {!colapsada && <span className="flex-1 text-left">WhatsApp (WAHA)</span>}
+                {colapsada && (
+                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+                    WhatsApp (WAHA)
+                  </div>
+                )}
+              </button>
+            )}
           </>
         )}
       </nav>

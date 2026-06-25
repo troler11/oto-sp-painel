@@ -126,6 +126,7 @@ const loginLimiter = rateLimit({
 const WAHA_API_URL    = process.env.WAHA_API_URL;
 const WAHA_SESSION    = process.env.WAHA_SESSION || 'default';
 const WAHA_API_KEY    = process.env.WAHA_API_KEY;
+const WAHA_BASE_URL   = WAHA_API_URL ? (() => { try { return new URL(WAHA_API_URL).origin; } catch { return null; } })() : null;
 const JWT_SECRET      = process.env.JWT_SECRET;
 const REFRESH_SECRET  = process.env.REFRESH_SECRET;
 const WEBHOOK_SECRET  = process.env.WEBHOOK_SECRET;
@@ -1283,6 +1284,75 @@ async function enviarWhatsApp(telefone, texto) {
     logger.error('Falha ao enviar WhatsApp', { error: err.message, telefone });
   }
 }
+
+// ============================================================
+// WAHA — GESTÃO DE SESSÃO (admin only)
+// ============================================================
+const wahaHeaders = () => {
+  const h = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+  if (WAHA_API_KEY) h['X-Api-Key'] = WAHA_API_KEY;
+  return h;
+};
+
+const apenasAdmin = (req, res, next) => {
+  if (req.user?.papel !== 'admin') return res.status(403).json({ erro: 'Apenas administradores.' });
+  next();
+};
+
+app.get('/api/waha/status', verificarToken, apenasAdmin, async (req, res) => {
+  if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
+  try {
+    const r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}`, { headers: wahaHeaders(), signal: AbortSignal.timeout(8000) });
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ erro: 'Não foi possível contactar o WAHA.', detalhe: err.message });
+  }
+});
+
+app.get('/api/waha/qr', verificarToken, apenasAdmin, async (req, res) => {
+  if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
+  try {
+    const r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}/auth/qr`, { headers: wahaHeaders(), signal: AbortSignal.timeout(8000) });
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ erro: 'Erro ao buscar QR code.', detalhe: err.message });
+  }
+});
+
+app.post('/api/waha/start', verificarToken, apenasAdmin, async (req, res) => {
+  if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
+  try {
+    const r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}/start`, { method: 'POST', headers: wahaHeaders(), signal: AbortSignal.timeout(10000) });
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ erro: 'Erro ao iniciar sessão.', detalhe: err.message });
+  }
+});
+
+app.post('/api/waha/stop', verificarToken, apenasAdmin, async (req, res) => {
+  if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
+  try {
+    const r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}/stop`, { method: 'POST', headers: wahaHeaders(), signal: AbortSignal.timeout(10000) });
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ erro: 'Erro ao parar sessão.', detalhe: err.message });
+  }
+});
+
+app.post('/api/waha/restart', verificarToken, apenasAdmin, async (req, res) => {
+  if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
+  try {
+    const r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}/restart`, { method: 'POST', headers: wahaHeaders(), signal: AbortSignal.timeout(10000) });
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ erro: 'Erro ao reiniciar sessão.', detalhe: err.message });
+  }
+});
 
 // ============================================================
 // LIMPEZA PERIÓDICA: refresh tokens expirados

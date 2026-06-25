@@ -32,6 +32,7 @@ import CancelModal from './components/modals/CancelModal';
 import UserModal from './components/modals/UserModal';
 import UserManagementModal from './components/modals/UserManagementModal';
 import TemplateModal from './components/modals/TemplateModal';
+import WahaModal from './components/modals/WahaModal';
 
 const API_URL = '/api';
 
@@ -111,6 +112,7 @@ export default function App() {
   const [msgNovoUsuario, setMsgNovoUsuario] = useState({ texto: '', tipo: '' });
 
   const [modalGestaoUsuariosAberto, setModalGestaoUsuariosAberto] = useState(false);
+  const [modalWahaAberto, setModalWahaAberto] = useState(false);
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [editandoSenhaId, setEditandoSenhaId] = useState<number | null>(null);
   const [novaSenhaGestao, setNovaSenhaGestao] = useState('');
@@ -631,7 +633,7 @@ export default function App() {
           </div>
         )}
 
-        <Sidebar filtro={filtro} setFiltro={setFiltro} contagens={contagens} erroAcesso={erroAcesso} fazerLogout={fazerLogout} setModalModelosAberto={setModalModelosAberto} setModalNovoUsuarioAberto={setModalNovoUsuarioAberto} abrirGestaoUsuarios={abrirGestaoUsuarios} />
+        <Sidebar filtro={filtro} setFiltro={setFiltro} contagens={contagens} erroAcesso={erroAcesso} fazerLogout={fazerLogout} setModalModelosAberto={setModalModelosAberto} setModalNovoUsuarioAberto={setModalNovoUsuarioAberto} abrirGestaoUsuarios={abrirGestaoUsuarios} setModalWahaAberto={setModalWahaAberto} />
 
         <main className={`flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300 ${chatAberto ? 'mr-[400px]' : ''}`}>
           <Header filtro={filtro} searchTerm={searchTerm} setSearchTerm={setSearchTerm} dataInicio={dataInicio} setDataInicio={setDataInicio} dataFim={dataFim} setDataFim={setDataFim} carregandoDados={carregandoDados} buscarDados={buscarDados} notificacoes={notificacoes} setNotificacoes={setNotificacoes} painelNotifAberto={painelNotifAberto} setPainelNotifAberto={setPainelNotifAberto} />
@@ -691,6 +693,7 @@ export default function App() {
         {modalCancelamentoAberto && pacienteCancelamento && <CancelModal paciente={pacienteCancelamento} motivo={motivoCancelamento} setMotivo={setMotivoCancelamento} onSubmit={confirmarCancelamento} onClose={() => setModalCancelamentoAberto(false)} />}
         {modalNovoUsuarioAberto && <UserModal form={novoUsuarioForm} setForm={setNovoUsuarioForm} msg={msgNovoUsuario} onSubmit={criarNovaConta} onClose={() => setModalNovoUsuarioAberto(false)} />}
         {modalGestaoUsuariosAberto && <UserManagementModal usuarios={listaUsuarios} editandoSenhaId={editandoSenhaId} setEditandoSenhaId={setEditandoSenhaId} novaSenha={novaSenhaGestao} setNovaSenha={setNovaSenhaGestao} editandoUsuarioId={editandoUsuarioId} setEditandoUsuarioId={setEditandoUsuarioId} novoNome={novoNomeGestao} setNovoNome={setNovoNomeGestao} onAtualizarNome={atualizarNomeUsuario} onAlterarSenha={alterarSenhaUsuario} onExcluir={excluirUsuario} onClose={() => { setModalGestaoUsuariosAberto(false); setEditandoSenhaId(null); setEditandoUsuarioId(null); }} />}
+        {modalWahaAberto && <WahaModal onClose={() => setModalWahaAberto(false)} />}
         {modalModelosAberto && <TemplateModal modelos={modelos} editando={editandoModelo} form={novoModeloForm} setForm={setNovoModeloForm} onSubmit={salvarModelo} onEditar={abrirEdicaoModelo} onRemover={removerModelo} onClose={() => { setModalModelosAberto(false); setEditandoModelo(null); setNovoModeloForm({ titulo: '', texto: '' }); }} />}
       </div>
     </AppContext.Provider>
