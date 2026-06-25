@@ -979,14 +979,6 @@ app.put('/api/status', verificarToken, async (req, res) => {
       );
     }
 
-    // Finalizado → marca como concluído para sair da triagem
-    if (status === 'FINALIZADO' && agendados.length > 0 && agendados[0].contato_id) {
-      await pool.query(
-        `UPDATE contatos_whatsapp SET status_robo = 'Concluído' WHERE id = $1`,
-        [agendados[0].contato_id]
-      );
-    }
-
     // Notificação WhatsApp para cancelamento
     if (status === 'CANCELADO' && agendados.length > 0) {
       const ag = agendados[0];
@@ -1053,7 +1045,7 @@ app.put('/api/agendar', verificarToken, async (req, res) => {
     if (agendados.length > 0) {
       const ag = agendados[0];
       const { rows: contatos } = await pool.query(
-        `UPDATE contatos_whatsapp SET status_robo='Agendado' WHERE id=$1 RETURNING telefone`,
+        `UPDATE contatos_whatsapp SET status_robo='Robô' WHERE id=$1 RETURNING telefone`,
         [ag.contato_id]
       );
 
