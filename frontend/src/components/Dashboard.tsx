@@ -95,7 +95,7 @@ export default function Dashboard({ agendamentos, leads }: Props) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'SLA de Espera', valor: `${mediaEsperaMin} min`, sub: 'Tempo médio na fila', icon: <Clock size={22} />, cor: 'from-indigo-500 to-indigo-600', bg: 'bg-indigo-50', tc: 'text-indigo-600', cardBg: 'from-white to-indigo-50/60', borderT: 'border-t-2 border-indigo-200' },
-          { label: 'Conversão', valor: `${taxaConversaoFunil}%`, sub: `${concluidos} de ${contatosTotais} contactos`, icon: <TrendingUp size={22} />, cor: 'from-[#11caa0] to-[#0e9f7e]', bg: 'bg-emerald-50', tc: 'text-emerald-600', cardBg: 'from-white to-emerald-50/60', borderT: 'border-t-2 border-emerald-200' },
+          { label: 'Conversão', valor: `${taxaConversaoFunil}%`, sub: `${concluidos} de ${contatosTotais} contatos`, icon: <TrendingUp size={22} />, cor: 'from-[#11caa0] to-[#0e9f7e]', bg: 'bg-emerald-50', tc: 'text-emerald-600', cardBg: 'from-white to-emerald-50/60', borderT: 'border-t-2 border-emerald-200' },
           { label: 'Receita Realizada', valor: `R$ ${receitaRealizada.toLocaleString('pt-BR')}`, sub: 'Consultas particulares', icon: <Wallet size={22} />, cor: 'from-blue-500 to-blue-600', bg: 'bg-blue-50', tc: 'text-blue-600', cardBg: 'from-white to-blue-50/60', borderT: 'border-t-2 border-blue-200' },
           { label: 'Previsão 30d', valor: `R$ ${previsaoFaturacao.toLocaleString('pt-BR')}`, sub: 'Cashflow agendado', icon: <DollarSign size={22} />, cor: 'from-amber-500 to-orange-500', bg: 'bg-amber-50', tc: 'text-amber-600', cardBg: 'from-white to-amber-50/60', borderT: 'border-t-2 border-amber-200' },
         ].map((kpi, i) => (
@@ -161,7 +161,7 @@ export default function Dashboard({ agendamentos, leads }: Props) {
           {/* Topo do funil — etapas comuns */}
           <div className="space-y-3 mb-5">
             {[
-              { label: 'Contactos Totais', qtd: contatosTotais, pct: 100, cor: 'bg-slate-300', tc: 'text-slate-700' },
+              { label: 'Contatos Totais', qtd: contatosTotais, pct: 100, cor: 'bg-slate-300', tc: 'text-slate-700' },
               { label: 'Triados pela IA', qtd: totalAtendimentos, pct: contatosTotais > 0 ? Math.round((totalAtendimentos / contatosTotais) * 100) : 0, cor: 'bg-blue-400', tc: 'text-blue-700' },
             ].map((item, i) => (
               <div key={i}>
