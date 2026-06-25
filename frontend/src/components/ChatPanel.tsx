@@ -53,9 +53,10 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
         {mensagens.map((msg, idx) => {
-          // Remove payload N8N (tudo a partir de $$$) e filtra mensagens vazias resultantes
+          // Remove payload N8N (tudo a partir de $$$); oculta mensagens que são só JSON
           const textoVisivel = msg.texto.split('$$$')[0].trim();
           if (!textoVisivel) return null;
+          try { if (textoVisivel.startsWith('{') && JSON.parse(textoVisivel)) return null; } catch { /* não é JSON */ }
           return (
           <div key={idx} className={`flex ${msg.origem === 'sistema' ? 'justify-center' : msg.origem === 'paciente' ? 'justify-start' : 'justify-end'}`}>
             <div className={`max-w-[85%] text-[13px] shadow-sm ${msg.origem === 'sistema' ? 'bg-orange-100 text-orange-900 rounded-xl px-4 py-2 text-xs font-bold border border-orange-200' : msg.origem === 'paciente' ? 'bg-white text-slate-800 rounded-2xl rounded-tl-md px-4 py-3' : 'bg-[#dcf8c6] text-slate-800 rounded-2xl rounded-tr-md px-4 py-3'}`}>
