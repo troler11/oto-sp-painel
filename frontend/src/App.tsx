@@ -523,7 +523,7 @@ export default function App() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-800 leading-tight">{lead.nome_titular || lead.telefone}</h3>
-                {!isTriage && lead.nome_titular && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
+                {lead.nome_titular && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
                 {!isTriage && lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{tempoAtras(lead.ultima_mensagem)}</p>
               </div>
