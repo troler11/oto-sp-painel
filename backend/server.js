@@ -1223,7 +1223,7 @@ app.post('/api/leads/:id/converter', verificarToken, async (req, res) => {
     await pool.query(`
       INSERT INTO agendamentos (contato_id, nome_paciente, cpf_paciente, status_atendimento, intencao, especialidade, unidade, pagamento, para_terceiro)
       VALUES ($1, $2, $3, 'PENDENTE', 'Conversão Manual', 'Não informada', 'A Definir', 'A Combinar', false)
-    `, [lead.id, lead.nome_titular || lead.telefone || 'Paciente sem nome', lead.cpf_titular || null]);
+    `, [lead.id, lead.nome_atendimento || lead.nome_titular || lead.telefone || 'Paciente sem nome', lead.cpf_titular || null]);
 
     await pool.query(
       `UPDATE contatos_whatsapp SET status_robo='Finalizado' WHERE id=$1`,
