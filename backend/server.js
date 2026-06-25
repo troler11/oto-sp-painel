@@ -995,6 +995,27 @@ app.put('/api/status', verificarToken, async (req, res) => {
       }
     }
 
+    // Finalizar ficha → reativa bot e limpa dados de coleta para próximo atendimento
+    if (status === 'FINALIZADO' && agendados.length > 0) {
+      await pool.query(
+        `UPDATE contatos_whatsapp SET
+          status_robo          = 'Robô',
+          sessao_intencao      = 'triagem',
+          sessao_rota          = 0,
+          sessao_atualizada_em = NOW(),
+          coleta_unidade       = '',
+          coleta_data          = '',
+          coleta_periodo       = '',
+          coleta_horario       = '',
+          coleta_convenio      = '',
+          coleta_medico        = '',
+          nome_atendimento     = '',
+          coleta_id_tisaude    = ''
+        WHERE id = $1`,
+        [agendados[0].contato_id]
+      );
+    }
+
     await registarAuditoria({
       usuario_id: req.user.id, usuario_nome: req.user.nome,
       acao: `STATUS_${status}`, entidade: 'agendamentos', entidade_id: parseInt(id),
