@@ -17,7 +17,7 @@ export interface Agendamento {
   data_atualizacao?: string; data_atendimento?: string; data_cancelamento?: string;
 }
 export interface Lead {
-  id: number; telefone: string; nome_titular: string; cpf_titular?: string;
+  id: number; telefone: string; nome_titular: string; nome_atendimento?: string; cpf_titular?: string;
   status_robo: string; ultima_mensagem: string; data_cadastro: string;
 }
 export interface Notificacao { id: number; texto: string; tipo: 'info' | 'sucesso' | 'aviso'; lida: boolean; hora: string; }

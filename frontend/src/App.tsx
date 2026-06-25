@@ -518,12 +518,12 @@ export default function App() {
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
           <div className="flex justify-between items-start mb-3">
             <div className="flex items-center gap-2.5">
-              <div className={`w-10 h-10 ${getAvatarCor(lead.nome_titular || lead.telefone)} text-white rounded-full flex items-center justify-center font-extrabold text-sm shrink-0 shadow-sm`}>
-                {(lead.nome_titular || lead.telefone).substring(0, 2).toUpperCase()}
+              <div className={`w-10 h-10 ${getAvatarCor(lead.nome_atendimento || lead.nome_titular || lead.telefone)} text-white rounded-full flex items-center justify-center font-extrabold text-sm shrink-0 shadow-sm`}>
+                {(lead.nome_atendimento || lead.nome_titular || lead.telefone).substring(0, 2).toUpperCase()}
               </div>
               <div>
-                <h3 className="font-bold text-slate-800 leading-tight">{lead.nome_titular || lead.telefone}</h3>
-                {lead.nome_titular && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
+                <h3 className="font-bold text-slate-800 leading-tight">{lead.nome_atendimento || lead.nome_titular || lead.telefone}</h3>
+                {(lead.nome_atendimento || lead.nome_titular) && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
                 {!isTriage && lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{tempoAtras(lead.ultima_mensagem)}</p>
               </div>

@@ -832,7 +832,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT
-        c.id, c.telefone, c.nome_titular, c.cpf_titular, c.status_robo,
+        c.id, c.telefone, c.nome_titular, c.nome_atendimento, c.cpf_titular, c.status_robo,
         c.ultima_mensagem, c.data_cadastro
       FROM contatos_whatsapp c
       LEFT JOIN LATERAL (
