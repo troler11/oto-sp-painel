@@ -18,7 +18,7 @@ export interface Agendamento {
 }
 export interface Lead {
   id: number; telefone: string; nome_titular: string; nome_atendimento?: string; cpf_titular?: string;
-  status_robo: string; ultima_mensagem: string; data_cadastro: string;
+  status_robo: string; ultima_mensagem: string; data_cadastro: string; sessao_intencao?: string;
 }
 export interface Notificacao { id: number; texto: string; tipo: 'info' | 'sucesso' | 'aviso'; lida: boolean; hora: string; }
 export interface MensagemChat { texto: string; origem: 'paciente' | 'ia_ou_recepcao' | 'sistema'; data: string; }

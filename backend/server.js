@@ -833,7 +833,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT
         c.id, c.telefone, c.nome_titular, c.nome_atendimento, c.cpf_titular, c.status_robo,
-        c.ultima_mensagem, c.data_cadastro
+        c.ultima_mensagem, c.data_cadastro, c.sessao_intencao
       FROM contatos_whatsapp c
       WHERE NOT EXISTS (
         SELECT 1 FROM agendamentos a
