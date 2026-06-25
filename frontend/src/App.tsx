@@ -131,6 +131,21 @@ export default function App() {
   useEffect(() => { document.title = 'OtoFlow CRM | Gestão de Atendimentos'; }, []);
   useEffect(() => { pacienteAtivoChatRef.current = pacienteAtivoChat; }, [pacienteAtivoChat]);
 
+  // Polling de fallback: quando o chat está aberto, busca mensagens a cada 5s
+  useEffect(() => {
+    if (!chatAberto || !pacienteAtivoChat?.telefone) return;
+    const tel = pacienteAtivoChat.telefone;
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/chat/${tel}`, { credentials: 'include' });
+        if (!res.ok) return;
+        const novas: MensagemChat[] = await res.json();
+        setMensagens(prev => novas.length !== prev.length ? novas : prev);
+      } catch { /* silencioso */ }
+    }, 5000);
+    return () => clearInterval(poll);
+  }, [chatAberto, pacienteAtivoChat?.telefone]);
+
   useEffect(() => {
     const restaurar = async () => {
       try {
