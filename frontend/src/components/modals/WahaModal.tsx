@@ -48,13 +48,14 @@ export default function WahaModal({ onClose }: Props) {
     else setQr(null);
   }, [dados?.status, buscarQR]);
 
-  // Polling quando aguardando QR ou iniciando
+  // Polling quando aguardando QR, iniciando ou status ainda indefinido
   useEffect(() => {
-    if (!['SCAN_QR_CODE', 'STARTING'].includes(dados?.status || '')) return;
+    if (!['SCAN_QR_CODE', 'STARTING', 'STOPPED'].includes(dados?.status || '') && dados !== null) return;
+    if (dados?.status === 'STOPPED') return; // Parado não precisa de polling
     const t = setInterval(() => {
       buscarStatus(true);
       if (dados?.status === 'SCAN_QR_CODE') buscarQR();
-    }, 4000);
+    }, 3000);
     return () => clearInterval(t);
   }, [dados?.status, buscarStatus, buscarQR]);
 

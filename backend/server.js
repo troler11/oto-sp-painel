@@ -1303,9 +1303,11 @@ app.get('/api/waha/status', verificarToken, apenasAdmin, async (req, res) => {
   if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
   try {
     const r = await fetch(`${WAHA_BASE_URL}/api/sessions`, { headers: wahaHeaders(), signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return res.json({ status: 'STOPPED', me: null });
     const list = await r.json();
-    const session = Array.isArray(list) ? list.find(s => s.name === WAHA_SESSION) || list[0] : list;
-    res.json({ status: session?.status || 'UNKNOWN', me: session?.me || null });
+    if (!Array.isArray(list) || list.length === 0) return res.json({ status: 'STOPPED', me: null });
+    const session = list.find(s => s.name === WAHA_SESSION) || list[0];
+    res.json({ status: session?.status || 'STOPPED', me: session?.me || null });
   } catch (err) {
     res.status(502).json({ erro: 'Não foi possível contactar o WAHA.', detalhe: err.message });
   }
@@ -1316,7 +1318,6 @@ app.get('/api/waha/qr', verificarToken, apenasAdmin, async (req, res) => {
   try {
     const r = await fetch(`${WAHA_BASE_URL}/api/${WAHA_SESSION}/auth/qr`, { headers: wahaHeaders(), signal: AbortSignal.timeout(8000) });
     const data = await r.json();
-    // Retorna data URI pronta para o frontend
     const dataUri = data.data ? `data:${data.mimetype || 'image/png'};base64,${data.data}` : null;
     res.json({ qr: dataUri });
   } catch (err) {
@@ -1327,9 +1328,17 @@ app.get('/api/waha/qr', verificarToken, apenasAdmin, async (req, res) => {
 app.post('/api/waha/start', verificarToken, apenasAdmin, async (req, res) => {
   if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
   try {
-    const r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}/start`, { method: 'POST', headers: wahaHeaders(), signal: AbortSignal.timeout(10000) });
-    const data = await r.json();
-    res.json({ status: data?.status || 'STARTING' });
+    // Tenta iniciar a sessão existente
+    let r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}/start`, { method: 'POST', headers: wahaHeaders(), signal: AbortSignal.timeout(10000) });
+    // Se sessão não existe (404/422), cria e inicia
+    if (!r.ok && [404, 422, 400].includes(r.status)) {
+      await fetch(`${WAHA_BASE_URL}/api/sessions`, {
+        method: 'POST', headers: wahaHeaders(), signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({ name: WAHA_SESSION, config: { webhooks: [{ url: process.env.WAHA_WEBHOOK_URL || '', events: ['message'] }] } }),
+      });
+      r = await fetch(`${WAHA_BASE_URL}/api/sessions/${WAHA_SESSION}/start`, { method: 'POST', headers: wahaHeaders(), signal: AbortSignal.timeout(10000) });
+    }
+    res.json({ status: 'STARTING' });
   } catch (err) {
     res.status(502).json({ erro: 'Erro ao iniciar sessão.', detalhe: err.message });
   }
