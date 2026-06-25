@@ -1,13 +1,18 @@
-import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, Users, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award } from 'lucide-react';
+import { useState } from 'react';
+import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, Users, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award, Trash2 } from 'lucide-react';
 import type { Agendamento, Lead } from '../types';
 import { formatarDataBr, formatarHora } from '../utils/helpers';
 
 interface Props { agendamentos: Agendamento[]; leads: Lead[]; }
 
 export default function Dashboard({ agendamentos, leads }: Props) {
+  const [tabaCancelamento, setTabaCancelamento] = useState<'consultas' | 'descartados'>('consultas');
+
   const totalAtendimentos = agendamentos.length;
   const concluidos = agendamentos.filter(a => ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento)).length;
-  const cancelados = agendamentos.filter(a => a.status_atendimento === 'CANCELADO').length;
+  const canceladosConsulta = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta).length;
+  const descartados = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && !a.data_consulta).length;
+  const cancelados = canceladosConsulta;
   const finalizados = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length;
   // Apenas consultas com data e pagamento preenchidos
   const consultasAgendadas = agendamentos.filter(a =>
@@ -73,7 +78,8 @@ export default function Dashboard({ agendamentos, leads }: Props) {
     }
   });
   const rankingLoyalty = Object.entries(medicosData).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
-  const motivosCancelamento = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.observacoes).slice(0, 4);
+  const motivosCancelamento = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta && a.observacoes).slice(0, 4);
+  const motivosDescarte = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && !a.data_consulta && a.observacoes).slice(0, 4);
 
   const hoje = new Date();
   const toLocalDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -117,7 +123,8 @@ export default function Dashboard({ agendamentos, leads }: Props) {
         {[
           { label: 'Total Fichas', valor: totalAtendimentos, icon: <FileText size={18} />, cor: 'text-slate-600', bg: 'bg-slate-100' },
           { label: 'Finalizados', valor: finalizados, icon: <CheckCircle2 size={18} />, cor: 'text-emerald-700', bg: 'bg-emerald-100' },
-          { label: 'Cancelamentos', valor: cancelados, icon: <XCircle size={18} />, cor: 'text-red-700', bg: 'bg-red-100' },
+          { label: 'Consultas Canceladas', valor: canceladosConsulta, icon: <XCircle size={18} />, cor: 'text-red-700', bg: 'bg-red-100' },
+          { label: 'Tickets Descartados', valor: descartados, icon: <Trash2 size={18} />, cor: 'text-slate-600', bg: 'bg-slate-100' },
         ].map((k, i) => (
           <div key={i} className="bg-white rounded-xl p-4 border border-slate-200 flex items-center gap-3">
             <div className={`${k.bg} ${k.cor} p-2.5 rounded-lg`}>{k.icon}</div>
@@ -369,7 +376,7 @@ export default function Dashboard({ agendamentos, leads }: Props) {
 
       {/* CANCELAMENTOS */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2 uppercase tracking-wider">
             <AlertCircle size={18} className="text-red-500" /> Análise de Cancelamentos
           </h3>
@@ -377,19 +384,45 @@ export default function Dashboard({ agendamentos, leads }: Props) {
             <span className="text-sm font-extrabold text-red-600">{taxaCancelamento}% de cancelamento</span>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {motivosCancelamento.length === 0
-            ? <div className="col-span-2 flex items-center gap-3 py-6 justify-center"><CheckCircle2 size={24} className="text-emerald-400" /><p className="text-slate-500 font-bold">Excelente! Sem cancelamentos recentes com justificativa.</p></div>
-            : motivosCancelamento.map((a, i) => (
-              <div key={i} className="flex items-start gap-3 bg-red-50/70 p-4 rounded-xl border border-red-100">
-                <XCircle size={16} className="text-red-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm text-red-900 font-semibold italic">"{a.observacoes}"</p>
-                  <p className="text-[10px] text-red-500 mt-1.5 font-bold uppercase tracking-wider">{a.nome_paciente} · {formatarDataBr(a.data_criacao)}</p>
-                </div>
-              </div>
-            ))}
+        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mb-5 w-fit">
+          <button onClick={() => setTabaCancelamento('consultas')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-extrabold transition-all ${tabaCancelamento === 'consultas' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            Consultas Canceladas <span className="ml-1 text-[10px] opacity-70">({canceladosConsulta})</span>
+          </button>
+          <button onClick={() => setTabaCancelamento('descartados')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-extrabold transition-all ${tabaCancelamento === 'descartados' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+            Tickets Descartados <span className="ml-1 text-[10px] opacity-70">({descartados})</span>
+          </button>
         </div>
+        {tabaCancelamento === 'consultas' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {motivosCancelamento.length === 0
+              ? <div className="col-span-2 flex items-center gap-3 py-6 justify-center"><CheckCircle2 size={24} className="text-emerald-400" /><p className="text-slate-500 font-bold">Sem consultas canceladas com justificativa.</p></div>
+              : motivosCancelamento.map((a, i) => (
+                <div key={i} className="flex items-start gap-3 bg-red-50/70 p-4 rounded-xl border border-red-100">
+                  <XCircle size={16} className="text-red-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-red-900 font-semibold italic">"{a.observacoes}"</p>
+                    <p className="text-[10px] text-red-500 mt-1.5 font-bold uppercase tracking-wider">{a.nome_paciente} · {formatarDataBr(a.data_criacao)}</p>
+                  </div>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {motivosDescarte.length === 0
+              ? <div className="col-span-2 flex items-center gap-3 py-6 justify-center"><CheckCircle2 size={24} className="text-emerald-400" /><p className="text-slate-500 font-bold">Sem tickets descartados com justificativa.</p></div>
+              : motivosDescarte.map((a, i) => (
+                <div key={i} className="flex items-start gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <Trash2 size={16} className="text-slate-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm text-slate-700 font-semibold italic">"{a.observacoes}"</p>
+                    <p className="text-[10px] text-slate-500 mt-1.5 font-bold uppercase tracking-wider">{a.nome_paciente} · {formatarDataBr(a.data_criacao)}</p>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
     </div>
   );
