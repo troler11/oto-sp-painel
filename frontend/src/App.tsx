@@ -453,7 +453,7 @@ export default function App() {
   };
 
   const contagens: Record<string, number> = {
-    TRIAGEM: leads.length, PENDENTE: agendamentos.filter(a => a.status_atendimento === 'PENDENTE').length,
+    TRIAGEM: leads.filter(l => l.sessao_intencao !== 'concluido').length, PENDENTE: agendamentos.filter(a => a.status_atendimento === 'PENDENTE').length,
     'EM ATENDIMENTO': agendamentos.filter(a => a.status_atendimento === 'EM ATENDIMENTO').length,
     AGENDADO: agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length,
     FINALIZADO: agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length,
