@@ -63,8 +63,15 @@ export default function WahaModal({ onClose }: Props) {
     setErro(null);
     try {
       const r = await fetchSeguro(`${API_URL}/waha/${endpoint}`, { method: 'POST' });
-      if (!r.ok) { const d = await r.json(); setErro(d.erro || 'Ação falhou.'); }
-      await buscarStatus();
+      if (!r.ok) { const d = await r.json(); setErro(d.erro || 'Ação falhou.'); return; }
+      // Força status localmente para feedback imediato enquanto WAHA processa
+      if (endpoint === 'logout' || endpoint === 'stop') {
+        setDados({ status: 'STOPPED', me: null });
+      } else if (endpoint === 'start') {
+        setDados(prev => ({ status: 'STARTING', me: prev?.me || null }));
+      }
+      // Aguarda WAHA processar antes de buscar status real
+      setTimeout(() => buscarStatus(true), 2000);
     } catch {
       setErro('Erro ao executar ação.');
     } finally {
