@@ -532,8 +532,10 @@ export default function App() {
 
   const renderKanban = () => {
     if (filtro === 'TRIAGEM' || filtro === 'LEADS') {
-      const lista = filtrosLeads;
       const isTriage = filtro === 'TRIAGEM';
+      const lista = isTriage
+        ? filtrosLeads.filter(l => l.status_robo === 'Robô' || l.status_robo === 'Humano')
+        : filtrosLeads;
       return lista.length ? lista.map(lead => (
         <div key={lead.id} className={`bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all relative flex flex-col group`}>
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
