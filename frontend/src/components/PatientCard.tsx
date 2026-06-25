@@ -47,11 +47,13 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
     ? urgencia === 'alta' ? 'border-red-300 shadow-red-50' : urgencia === 'media' ? 'border-amber-200' : 'border-slate-200'
     : 'border-slate-200';
 
+  const isDescartado = item.status_atendimento === 'CANCELADO' && !item.data_consulta;
   const corBarra = isPendente
     ? urgencia === 'alta' ? 'bg-gradient-to-b from-red-500 to-orange-500' : urgencia === 'media' ? 'bg-amber-400' : 'bg-amber-300'
     : item.status_atendimento === 'EM ATENDIMENTO' ? 'bg-gradient-to-b from-amber-400 to-orange-400 animate-pulse'
     : item.status_atendimento === 'AGENDADO' ? 'bg-gradient-to-b from-emerald-500 to-teal-500'
-    : item.status_atendimento === 'FINALIZADO' ? 'bg-indigo-500' : 'bg-slate-300';
+    : item.status_atendimento === 'FINALIZADO' ? 'bg-indigo-500'
+    : isDescartado ? 'bg-slate-400' : 'bg-red-400';
 
   return (
     <div className={`bg-white rounded-2xl p-5 shadow-sm border transition-all hover:shadow-xl hover:-translate-y-1 relative flex flex-col group ${corBorda}`}>
@@ -123,11 +125,18 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
       )}
 
       {item.status_atendimento === 'CANCELADO' && (
-        <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-4">
-          <p className="text-[9px] text-red-500 font-extrabold uppercase tracking-widest mb-1">Cancelado</p>
-          <p className="text-xs font-bold text-red-900">{item.data_cancelamento ? formatarHora(item.data_cancelamento) : '—'}</p>
-          <p className="text-xs text-red-700 italic mt-1">"{item.observacoes || 'Sem justificativa'}"</p>
-        </div>
+        isDescartado ? (
+          <div className="bg-slate-100 border border-slate-200 rounded-xl p-3 mb-4">
+            <p className="text-[9px] text-slate-500 font-extrabold uppercase tracking-widest mb-1">Ticket Descartado</p>
+            <p className="text-xs text-slate-600 italic mt-1">"{item.observacoes || 'Sem justificativa'}"</p>
+          </div>
+        ) : (
+          <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-4">
+            <p className="text-[9px] text-red-500 font-extrabold uppercase tracking-widest mb-1">Consulta Cancelada</p>
+            <p className="text-xs font-bold text-red-900">{item.data_cancelamento ? formatarHora(item.data_cancelamento) : '—'}</p>
+            <p className="text-xs text-red-700 italic mt-1">"{item.observacoes || 'Sem justificativa'}"</p>
+          </div>
+        )
       )}
 
       <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-xs mb-4 flex-grow">
