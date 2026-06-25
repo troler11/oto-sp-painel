@@ -39,8 +39,8 @@ export default function Dashboard({ agendamentos, leads }: Props) {
   const finalizadosViaConsulta = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && a.data_consulta).length;
   const finalizadosDireto = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && !a.data_consulta).length;
 
-  const terceiros = agendamentos.filter(a => a.para_terceiro === true).length;
-  const titulares = agendamentos.filter(a => a.para_terceiro === false).length;
+  const terceiros = agendamentos.filter(a => a.para_terceiro === true && a.data_consulta).length;
+  const titulares = agendamentos.filter(a => a.para_terceiro === false && a.data_consulta).length;
   const totalDemografico = terceiros + titulares || 1;
 
   const uniOlimpia = agendamentos.filter(a => a.unidade?.toLowerCase().includes('olimpia') || a.unidade?.toLowerCase().includes('olímpia')).length;

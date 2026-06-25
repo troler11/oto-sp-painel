@@ -835,11 +835,11 @@ app.get('/api/leads', verificarToken, async (req, res) => {
         c.id, c.telefone, c.nome_titular, c.nome_atendimento, c.cpf_titular, c.status_robo,
         c.ultima_mensagem, c.data_cadastro
       FROM contatos_whatsapp c
-      LEFT JOIN LATERAL (
-        SELECT status_atendimento FROM agendamentos a
-        WHERE a.contato_id = c.id ORDER BY a.data_criacao DESC LIMIT 1
-      ) latest ON true
-      WHERE latest.status_atendimento IS NULL OR latest.status_atendimento = 'CANCELADO'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM agendamentos a
+        WHERE a.contato_id = c.id
+        AND a.status_atendimento IN ('AGENDADO', 'FINALIZADO')
+      )
       ORDER BY c.ultima_mensagem DESC
     `);
     res.json(rows);
