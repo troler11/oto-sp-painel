@@ -43,12 +43,22 @@ tags: [frontend, funções, referência]
 | `carregarChat(paciente, isLead)` | GET `/api/chat/:telefone` → abre painel lateral com histórico |
 | `enviarMensagemChat(e)` | POST `/api/chat/enviar` → adiciona mensagem localmente |
 | `interromperRobo(telefone)` | Confirm → PUT `/api/chat/:tel/interromper-robo` → status `Humano` |
+| `exportarLeadsCSV()` | Gera CSV UTF-8 BOM com colunas: Nome, Telefone, CPF, Status Bot, Última Mensagem, Data Cadastro. Botão visível apenas no filtro LEADS. |
+
+**Atualização em tempo real do chat:**
+- Socket.io: handler `mensagem:nova` usa `pacienteAtivoChatRef.current` (ref, não closure) para comparar telefone e evitar o bug de closure estale no `useEffect([sessao])`
+- Polling de fallback: quando `chatAberto`, faz GET `/api/chat/:tel` a cada 5s e atualiza se o número de mensagens mudou
 
 ### Leads
 | Função | Descrição |
 |---|---|
 | `descartarLead(id)` | Confirm perigo → DELETE `/api/leads/:id` |
 | `converterParaPendente(lead)` | Confirm → POST `/api/leads/:id/converter` → cria ficha PENDENTE |
+
+**Filtros de Triagem:**
+- `TRIAGEM` mostra apenas leads com `sessao_intencao !== 'concluido'`
+- Contagem no menu lateral também aplica o mesmo filtro
+- Leads com ficha ativa (PENDENTE/EM ATENDIMENTO/AGENDADO/FINALIZADO com data_consulta) não aparecem
 
 ### Usuários (admin)
 | Função | Descrição |
@@ -87,12 +97,11 @@ Substitui `window.confirm()` por um modal estilizado que retorna `Promise<boolea
 ```ts
 const { confirm, confirmState, responder } = useConfirm();
 
-// Uso:
 const ok = await confirm({
   mensagem: 'Deseja excluir?',
   titulo: 'Confirmar exclusão',   // opcional
   tipo: 'perigo',                 // 'perigo' | 'aviso' | 'info'
-  confirmLabel: 'Excluir',        // texto do botão de confirmação
+  confirmLabel: 'Excluir',
 });
 if (ok) { /* executa ação */ }
 ```
@@ -102,7 +111,6 @@ Notificações temporárias (4 segundos) no canto superior direito.
 
 ```ts
 const { toasts, toast, remover } = useToast();
-
 toast('Mensagem', 'sucesso');  // tipos: 'sucesso' | 'erro' | 'info' | 'aviso'
 ```
 
@@ -125,20 +133,30 @@ toast('Mensagem', 'sucesso');  // tipos: 'sucesso' | 'erro' | 'info' | 'aviso'
 
 | Componente | Arquivo | O que faz |
 |---|---|---|
-| `Sidebar` | `components/Sidebar.tsx` | Navegação lateral colapsável, badges de contagem, ações admin |
+| `Sidebar` | `components/Sidebar.tsx` | Navegação lateral colapsável, badges de contagem, ações admin+gerente |
 | `Header` | `components/Header.tsx` | Barra superior, busca, filtro de datas, painel de notificações |
-| `PatientCard` | `components/PatientCard.tsx` | Card do kanban com timer ao vivo, avatar colorido, ações por status |
-| `Dashboard` | `components/Dashboard.tsx` | Relatórios, KPIs, gráficos, análise de cancelamentos |
-| `ChatPanel` | `components/ChatPanel.tsx` | Painel lateral de chat WhatsApp com modelos de mensagem |
+| `PatientCard` | `components/PatientCard.tsx` | Card do kanban com timer ao vivo, avatar colorido, ações por status. CANCELADO mostra "Consulta Cancelada" (vermelho, com data_consulta) ou "Ticket Descartado" (cinza, sem data_consulta) |
+| `Dashboard` | `components/Dashboard.tsx` | Relatórios, KPIs, gráficos. Cancelamentos separados em "Consultas Canceladas" e "Tickets Descartados" |
+| `ChatPanel` | `components/ChatPanel.tsx` | Painel lateral de chat WhatsApp. Oculta mensagens com payload N8N (`$$$JSON`) e mensagens que são JSON puro |
 | `PatientTimeline` | `components/PatientTimeline.tsx` | Modal com histórico cronológico de eventos do paciente |
-| `CardSkeleton` | `components/CardSkeleton.tsx` | Skeleton loading com animação shimmer durante carregamento inicial |
+| `CardSkeleton` | `components/CardSkeleton.tsx` | Skeleton loading com animação shimmer |
 | `ConfirmModal` | `components/ConfirmModal.tsx` | Modal de confirmação com 3 tipos: perigo/aviso/info |
 | `ToastContainer` | `components/ToastContainer.tsx` | Container de toasts fixo no canto superior direito |
 | `ScheduleModal` | `components/modals/ScheduleModal.tsx` | Modal para agendar/remarcar consulta (data, hora, médico) |
-| `CancelModal` | `components/modals/CancelModal.tsx` | Modal de cancelamento com campo de motivo |
+| `CancelModal` | `components/modals/CancelModal.tsx` | Título e cores adaptam: "Cancelar Consulta" (vermelho, com data_consulta) vs "Descartar Ticket" (cinza) |
 | `UserModal` | `components/modals/UserModal.tsx` | Modal de criação de novo usuário |
 | `UserManagementModal` | `components/modals/UserManagementModal.tsx` | Gestão de equipe: editar nome, trocar senha, excluir |
 | `TemplateModal` | `components/modals/TemplateModal.tsx` | CRUD de modelos de mensagem WhatsApp |
+| `WahaModal` | `components/modals/WahaModal.tsx` | Gestão de sessão WAHA: status, QR code, conectar/pausar/deslogar. Visível para admin e gerente |
+
+---
+
+## ChatPanel — Filtro de mensagens N8N
+
+Mensagens geradas pelo N8N são filtradas antes de exibir:
+1. Texto com `$$$` → exibe só a parte antes do separador (ex: `😊$$${"t":...}` → `😊`)
+2. Texto vazio após remover `$$$` → mensagem ocultada
+3. Texto que é JSON puro (começa com `{` e é válido) → mensagem ocultada
 
 ---
 
@@ -147,7 +165,7 @@ toast('Mensagem', 'sucesso');  // tipos: 'sucesso' | 'erro' | 'info' | 'aviso'
 | Evento | Direção | Ação no frontend |
 |---|---|---|
 | `agendamento:atualizado` | server → client | Atualiza card específico no estado sem refetch |
-| `mensagem:nova` | server → client | Se chat aberto para o telefone: adiciona mensagem. Caso contrário: notificação |
+| `mensagem:nova` | server → client | Se chat aberto para o telefone: adiciona mensagem. Caso contrário: notificação. Usa `pacienteAtivoChatRef` para evitar closure stale. |
 
 ---
 
@@ -170,16 +188,27 @@ toast('Mensagem', 'sucesso');  // tipos: 'sucesso' | 'erro' | 'info' | 'aviso'
 ## Fluxo do kanban
 
 ```
-TRIAGEM (leads)
+TRIAGEM (leads sem ficha ativa, sessao_intencao != 'concluido')
     ↓ converterParaPendente()
 PENDENTE
     ↓ assumirAtendimento()
 EM ATENDIMENTO
-    ├─ iniciarAgendamento() → AGENDADO
-    │      └─ finalizarAtendimento() → FINALIZADO
-    ├─ finalizarAtendimento() → FINALIZADO  ← atendimento de dúvida rápida
-    ├─ iniciarCancelamento() → CANCELADO
+    ├─ iniciarAgendamento() → AGENDADO  ← reset contato
+    │      └─ finalizarAtendimento() → FINALIZADO  ← reset contato
+    ├─ finalizarAtendimento() → FINALIZADO  ← reset contato (dúvida rápida)
+    ├─ iniciarCancelamento() → CANCELADO  ← reset contato
     └─ devolverParaFila() → PENDENTE
 
 Drag & Drop: mover entre PENDENTE / EM ATENDIMENTO / AGENDADO
 ```
+
+## Separação CANCELADO
+
+O status `CANCELADO` tem dois subtipos visuais (sem novo campo no banco):
+
+| Tipo | Condição | Visual |
+|---|---|---|
+| Consulta Cancelada | `CANCELADO + data_consulta IS NOT NULL` | Badge vermelho |
+| Ticket Descartado | `CANCELADO + data_consulta IS NULL` | Badge cinza |
+
+Usado em: `PatientCard`, `CancelModal`, `Dashboard` (KPIs e análise separados em abas).

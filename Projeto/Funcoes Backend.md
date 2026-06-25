@@ -8,14 +8,14 @@ tags: [backend, funções, referência]
 
 ### `POST /api/login`
 - Valida email + senha no banco (bcrypt)
-- Gera `accessToken` (JWT, 15min) e `refreshToken` (JWT, 7 dias)
+- Gera `accessToken` (JWT, 12h) e `refreshToken` (JWT, 7 dias)
 - Seta ambos como cookies `httpOnly; secure; sameSite=strict`
 - Salva hash do refresh token na tabela `refresh_tokens`
 
 ### `POST /api/refresh-token`
 - Lê cookie `refreshToken`
 - Verifica assinatura + se não foi revogado no banco
-- Emite novo `accessToken` (15min)
+- Emite novo `accessToken` (12h)
 
 ### `POST /api/logout`
 - Revoga refresh token no banco (`revogado = true`)
@@ -33,6 +33,10 @@ tags: [backend, funções, referência]
 - Verifica assinatura JWT com `JWT_SECRET`
 - Em expirado → `401 { expirado: true }` → frontend chama `/api/refresh-token`
 - Injeta `req.user = { id, nome, email, papel }`
+
+### `apenasAdmin`
+- Verifica `req.user.papel === 'admin' || 'gerente'`
+- Usado nas rotas WAHA e gestão de usuários
 
 ### `loginLimiter`
 - Rate limit: máx 10 tentativas de login por IP em 15 minutos
@@ -66,15 +70,29 @@ tags: [backend, funções, referência]
 ### `PUT /api/status`
 - Atualiza `status_atendimento` de um agendamento
 - Status válidos: `PENDENTE`, `EM ATENDIMENTO`, `AGENDADO`, `FINALIZADO`, `CANCELADO`
-- Finalizar de `EM ATENDIMENTO → FINALIZADO` direto (sem `data_consulta`) é um caminho válido para atendimentos rápidos/dúvidas
+- Finalizar de `EM ATENDIMENTO → FINALIZADO` direto (sem `data_consulta`) é caminho válido para dúvidas rápidas
 - Se `CANCELADO` + `notificar=true`: envia mensagem WhatsApp via WAHA
-- Emite evento `agendamento:atualizado` via Socket.io para todos os clientes
+- Emite evento `agendamento:atualizado` via Socket.io
 - Recepcionista não pode alterar card assumido por outra pessoa
+- **Reset do contato em `contatos_whatsapp` ao mudar para:**
+  - `EM ATENDIMENTO` → `status_robo = 'Humano'` (pausa bot)
+  - `PENDENTE` → `status_robo = 'Robô'` (reativa bot)
+  - `CANCELADO` → reset completo (ver abaixo)
+  - `FINALIZADO` → reset completo (ver abaixo)
+
+**Reset completo** (CANCELADO e FINALIZADO):
+```
+status_robo = 'Robô', sessao_intencao = 'triagem', sessao_rota = 0,
+sessao_atualizada_em = NOW(), coleta_unidade = '', coleta_data = '',
+coleta_periodo = '', coleta_horario = '', coleta_convenio = '',
+coleta_medico = '', nome_atendimento = '', coleta_id_tisaude = ''
+```
 
 ### `PUT /api/agendar`
 - Atualiza data, hora e médico de um agendamento
 - Muda status para `AGENDADO`
 - Envia confirmação via WhatsApp (se WAHA configurado)
+- **Também faz o reset completo do contato** (igual ao CANCELADO/FINALIZADO)
 
 ---
 
@@ -116,7 +134,7 @@ tags: [backend, funções, referência]
 
 ### `GET /api/chat/:telefone`
 - Busca mensagens em `chat_messages` com `session_id LIKE '55119..%'`
-- O `LIKE` com prefixo do número cobre todos os formatos históricos: bare, `@s.whatsapp.net`, `-v23-UUID` e variantes com dígitos extras gravadas por versões anteriores
+- O `LIKE` com prefixo do número cobre todos os formatos históricos: bare, `@s.whatsapp.net`, `-v23-UUID` e variantes com dígitos extras
 
 ### `POST /api/chat/enviar`
 - Envia mensagem via WAHA API
@@ -131,15 +149,41 @@ tags: [backend, funções, referência]
 ## Leads
 
 ### `GET /api/leads`
-- Lista contatos sem agendamento ativo (PENDENTE/EM ATENDIMENTO/AGENDADO)
-- Usa `LATERAL JOIN` para buscar último status de agendamento
+- Lista contatos que **não** têm agendamento ativo
+- Excluídos: `PENDENTE`, `EM ATENDIMENTO`, `AGENDADO`, ou `FINALIZADO com data_consulta`
+- Incluídos: sem agendamento, `CANCELADO`, `FINALIZADO sem data_consulta`
+- Retorna `sessao_intencao` para filtro de Triagem no frontend
 
 ### `DELETE /api/leads/:id` (admin/gerente)
 - Remove contato permanentemente
 
 ### `POST /api/leads/:id/converter`
 - Cria agendamento `PENDENTE` a partir do lead
-- Atualiza `status_robo = 'Finalizado'` no contato
+- Nome do paciente: `nome_atendimento || nome_titular || telefone` (prioriza o coletado pelo bot)
+
+---
+
+## WAHA — Gestão de Sessão WhatsApp (admin/gerente)
+
+### `GET /api/waha/status`
+- Chama `GET /api/sessions` no WAHA
+- Retorna `{ status, me }` — status possíveis: `WORKING`, `SCAN_QR_CODE`, `STARTING`, `STOPPED`, `FAILED`
+- Retorna `STOPPED` se lista vazia ou API inacessível (nunca `UNKNOWN`)
+
+### `GET /api/waha/qr`
+- Chama `GET /api/{session}/auth/qr`
+- Retorna `{ qr: 'data:image/png;base64,...' }`
+
+### `POST /api/waha/start`
+- Para a sessão primeiro (reset de FAILED/estados quebrados)
+- Tenta iniciar; se 404/422/400 cria a sessão e reinicia
+- Retorna `{ status: 'STARTING' }`
+
+### `POST /api/waha/stop`
+- Para a sessão (mantém número vinculado)
+
+### `POST /api/waha/logout`
+- Para + desloga (desvincula número — próximo start exige novo QR)
 
 ---
 
@@ -181,6 +225,7 @@ tags: [backend, funções, referência]
 | Função | Descrição |
 |---|---|
 | `enviarWhatsApp(telefone, texto)` | POST para WAHA_API_URL com timeout de 10s |
+| `wahaHeaders()` | Retorna `{ 'Content-Type': 'application/json', 'X-Api-Key': WAHA_API_KEY }` |
 | `setCache(key, value, ttlMs)` | Salva valor em Map com TTL |
 | `getCache(key)` | Retorna valor do cache se não expirado |
 | `clearCache(prefix)` | Remove todas as chaves que começam com o prefixo |

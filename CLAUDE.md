@@ -60,6 +60,8 @@ Qualquer lógica que deva aplicar-se **apenas a consultas reais** deve incluir `
 ### Socket.io
 Conexão iniciada em `useEffect` após login (`io({ withCredentials: true })`). O backend autentica o socket via middleware que lê o mesmo cookie `token`. Eventos: `agendamento:atualizado` e `mensagem:nova`.
 
+O handler `mensagem:nova` usa `pacienteAtivoChatRef` (não a variável de estado diretamente) para evitar closure stale — o `useEffect` do socket só roda uma vez ao logar. Além disso, existe um polling de fallback de 5s enquanto `chatAberto` for verdadeiro.
+
 ### Tipos TypeScript
 Todas as interfaces estão em `frontend/src/types.ts`. Sempre importar como `import type { ... }` — o Vite com rolldown falha no build se usar import de valor para tipos.
 
@@ -76,6 +78,27 @@ A query de histórico usa `session_id LIKE '55119..%'` para cobrir todos os form
 
 ### Valores ignorados em campos de médico
 Os valores `'A confirmar'`, `'Qualquer'` e `'Indiferente'` são tratados como ausência de médico em: `PatientCard`, Ranking de Médicos (Dashboard) e pré-preenchimento do `ScheduleModal`.
+
+### CANCELADO — dois subtipos visuais
+`CANCELADO + data_consulta IS NOT NULL` → "Consulta Cancelada" (vermelho)
+`CANCELADO + data_consulta IS NULL` → "Ticket Descartado" (cinza)
+Sem novo status no banco — apenas visual. Usado em `PatientCard`, `CancelModal`, `Dashboard`.
+
+### Reset do contato ao fechar um ticket
+Quando um agendamento muda para `FINALIZADO`, `CANCELADO` ou `AGENDADO`, o backend atualiza `contatos_whatsapp` com:
+`status_robo='Robô'`, `sessao_intencao='triagem'`, `sessao_rota=0`, `sessao_atualizada_em=NOW()` e zera todos os campos `coleta_*`, `nome_atendimento`, `coleta_id_tisaude`.
+
+### Triagem — filtro de sessao_intencao
+Leads com `sessao_intencao = 'concluido'` são excluídos da view Triagem e da contagem no menu lateral. A lógica vive no frontend (`leads.filter(l => l.sessao_intencao !== 'concluido')`). A API também exclui contatos com ficha ativa (PENDENTE/EM ATENDIMENTO/AGENDADO/FINALIZADO com data_consulta).
+
+### Converter lead → nome do paciente
+A rota `POST /api/leads/:id/converter` usa `nome_atendimento || nome_titular || telefone` como nome do paciente na ficha criada. `nome_atendimento` é o nome coletado pelo bot N8N durante o fluxo.
+
+### WAHA — gestão de sessão
+Rotas `/api/waha/*` disponíveis para `admin` e `gerente`. O start sempre faz um stop primeiro (reset de estados FAILED) e cria a sessão se não existir (404/422). Status nunca retorna UNKNOWN — usa STOPPED como fallback. Variáveis: `WAHA_API_URL`, `WAHA_API_KEY`, `WAHA_SESSION`.
+
+### ChatPanel — filtro de mensagens N8N
+Mensagens com `$$$` têm o payload N8N removido (exibe só o texto antes). Mensagens que são JSON puro (sem texto visível) são ocultadas completamente.
 
 ## Variáveis de ambiente obrigatórias
 `JWT_SECRET` e `REFRESH_SECRET` — o servidor chama `process.exit(1)` se ausentes.
