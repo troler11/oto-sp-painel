@@ -842,6 +842,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
         AND (
           a.status_atendimento IN ('PENDENTE', 'EM ATENDIMENTO', 'AGENDADO')
           OR (a.status_atendimento = 'FINALIZADO' AND a.data_consulta IS NOT NULL)
+          OR (a.status_atendimento = 'FINALIZADO' AND a.tipo_consulta IS NOT NULL AND a.tipo_consulta NOT ILIKE 'a confirmar')
         )
       )
       ORDER BY c.ultima_mensagem DESC
