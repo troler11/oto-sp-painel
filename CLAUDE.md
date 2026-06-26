@@ -76,6 +76,11 @@ O WAHA pode enviar session IDs no formato `5511997255184-v23-UUID@s.whatsapp.net
 
 A query de histórico usa `session_id LIKE '55119..%'` para cobrir todos os formatos históricos armazenados (inclusive os gerados com o bug antigo).
 
+### Webhook — autenticação e comportamento
+O N8N deve enviar o header `x-webhook-secret` com o valor de `WEBHOOK_SECRET` do `.env`. Sem ele retorna 401.
+
+HTTP 200 com `{ status: 'Ignorado' }` **não é erro** — significa que o contato está em modo Robô ou não foi encontrado. Nesse caso nada é salvo no banco. Só salva em `chat_messages` quando `status_robo = 'Humano'`.
+
 ### Valores ignorados em campos de médico
 Os valores `'A confirmar'`, `'Qualquer'` e `'Indiferente'` são tratados como ausência de médico em: `PatientCard`, Ranking de Médicos (Dashboard) e pré-preenchimento do `ScheduleModal`.
 

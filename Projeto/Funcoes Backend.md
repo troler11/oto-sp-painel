@@ -51,11 +51,20 @@ tags: [backend, funções, referência]
 ## Webhook WhatsApp
 
 ### `POST /api/webhook/receber`
-- Valida header `x-webhook-secret` com `timingSafeEqual` (evita timing attacks)
-- Suporta 3 formatos de payload WAHA
+- Valida header `x-webhook-secret` com `timingSafeEqual` (evita timing attacks) → `401` se inválido ou ausente
+- Suporta 3 formatos de payload:
+  - `body.event === 'message' + body.payload` → formato WAHA padrão
+  - `body.data.message` → formato alternativo
+  - `body.telefone + body.texto` → formato manual/N8N direto
 - Extrai telefone com `telefoneRaw.match(/^\d+/)?.[0]` — captura só os dígitos iniciais, ignorando sufixos como `-v23-UUID` ou `@s.whatsapp.net`. **Nunca usar `replace(/\D/g,'')` aqui** — inclui dígitos do UUID.
-- Se contato em modo `Humano`: salva mensagem em `chat_messages` + emite `mensagem:nova` via Socket.io
-- Se contato em modo `Robô`: ignora (o bot responde diretamente)
+- Ignora mensagens com `fromMe = true` ou texto vazio → retorna `{ status: 'Ignorado' }` com HTTP 200
+- Se contato **não encontrado** ou `status_robo = 'Robô'` → retorna `{ status: 'Ignorado' }` com HTTP 200 (não salva nada)
+- Se contato em modo `Humano`:
+  - Salva em `chat_messages` com `session_id = '{telefone}@s.whatsapp.net'`
+  - Atualiza `contatos_whatsapp.ultima_mensagem = NOW()`
+  - Emite `mensagem:nova` via Socket.io para o painel
+
+**Integração N8N:** o nó HTTP Request deve incluir o header `x-webhook-secret` com o valor da variável de ambiente `WEBHOOK_SECRET`. Sem esse header o N8N recebe 401. O retorno HTTP 200 com `{ status: 'Ignorado' }` **não significa erro** — apenas que a mensagem não era para o painel (contato em modo Robô).
 
 ---
 
