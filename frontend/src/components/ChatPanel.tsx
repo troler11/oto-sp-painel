@@ -56,7 +56,7 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           // Remove payload N8N (tudo a partir de $$$); oculta mensagens que são só JSON ou instrução N8N [TAG: ...]
           const textoVisivel = msg.texto.split('$$$')[0].trim();
           if (!textoVisivel) return null;
-          if (/^\[.+:.+\]$/s.test(textoVisivel)) return null;
+          if (/^\[.+:.+\]$/s.test(textoVisivel) || /^\[[A-Z_]+\][\s\S]*\[\/[A-Z_]+\]$/.test(textoVisivel)) return null;
           try { if (textoVisivel.startsWith('{') && JSON.parse(textoVisivel)) return null; } catch { /* não é JSON */ }
           return (
           <div key={idx} className={`flex ${msg.origem === 'sistema' ? 'justify-center' : msg.origem === 'paciente' ? 'justify-start' : 'justify-end'}`}>
