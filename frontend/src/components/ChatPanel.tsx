@@ -53,9 +53,10 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
         {mensagens.map((msg, idx) => {
-          // Remove payload N8N (tudo a partir de $$$); oculta mensagens que são só JSON
+          // Remove payload N8N (tudo a partir de $$$); oculta mensagens que são só JSON ou instrução N8N [TAG: ...]
           const textoVisivel = msg.texto.split('$$$')[0].trim();
           if (!textoVisivel) return null;
+          if (/^\[.+:.+\]$/s.test(textoVisivel)) return null;
           try { if (textoVisivel.startsWith('{') && JSON.parse(textoVisivel)) return null; } catch { /* não é JSON */ }
           return (
           <div key={idx} className={`flex ${msg.origem === 'sistema' ? 'justify-center' : msg.origem === 'paciente' ? 'justify-start' : 'justify-end'}`}>
