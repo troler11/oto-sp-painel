@@ -380,12 +380,22 @@ app.post('/api/webhook/receber', async (req, res) => {
           'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
           [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
         );
+        await pool.query(
+          'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
+          [telefoneLimpo]
+        );
         req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
+      } else {
+        // Bot mode: atualiza ultima_mensagem e desfaz 'concluido' se o bot já havia
+        // encerrado o fluxo — sem isso o contato seria bloqueado pelo filtro do frontend
+        await pool.query(
+          `UPDATE contatos_whatsapp
+           SET ultima_mensagem = NOW(),
+               sessao_intencao = CASE WHEN sessao_intencao = 'concluido' THEN 'triagem' ELSE sessao_intencao END
+           WHERE telefone = $1`,
+          [telefoneLimpo]
+        );
       }
-      await pool.query(
-        'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
-        [telefoneLimpo]
-      );
     }
 
     res.json({ sucesso: true });
