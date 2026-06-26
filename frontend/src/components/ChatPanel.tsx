@@ -56,14 +56,12 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           // Remove payload N8N (tudo a partir de $$$); oculta mensagens que são só JSON
           const textoVisivel = msg.texto.split('$$$')[0].trim();
           if (!textoVisivel) return null;
-          // Para mensagens de bot: remove blocos de instrução N8N mas preserva o resto
-          const textoFinal = msg.origem !== 'paciente'
-            ? textoVisivel
-                .replace(/\[[A-Z][A-Z0-9_ ]*:[^\]]*\]/g, '')
-                .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
-                .replace(/\[[A-Z][A-Z0-9_]+\]/g, '')
-                .trim()
-            : textoVisivel;
+          // Remove blocos de instrução N8N de qualquer mensagem, preserva o resto
+          const textoFinal = textoVisivel
+            .replace(/\[[A-Z][A-Z0-9_ ]*:[^\]]*\]/g, '')
+            .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
+            .replace(/\[[A-Z][A-Z0-9_]+\]/g, '')
+            .trim();
           if (!textoFinal) return null;
           try { if (textoFinal.startsWith('{') && JSON.parse(textoFinal)) return null; } catch { /* não é JSON */ }
           return (
