@@ -373,17 +373,19 @@ app.post('/api/webhook/receber', async (req, res) => {
       [telefoneLimpo]
     );
 
-    if (rows.length > 0 && rows[0].status_robo === 'Humano') {
-      const msgData = { type: 'human', content: texto, additional_kwargs: {} };
-      await pool.query(
-        'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
-        [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
-      );
+    if (rows.length > 0) {
+      if (rows[0].status_robo === 'Humano') {
+        const msgData = { type: 'human', content: texto, additional_kwargs: {} };
+        await pool.query(
+          'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+          [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+        );
+        req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
+      }
       await pool.query(
         'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
         [telefoneLimpo]
       );
-      req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
     }
 
     res.json({ sucesso: true });
@@ -836,11 +838,26 @@ app.get('/api/leads', verificarToken, async (req, res) => {
         c.id, c.telefone, c.nome_titular, c.nome_atendimento, c.cpf_titular, c.status_robo,
         c.ultima_mensagem, c.data_cadastro, c.sessao_intencao
       FROM contatos_whatsapp c
-      WHERE NOT EXISTS (
-        SELECT 1 FROM agendamentos a
-        WHERE a.contato_id = c.id
-        AND a.status_atendimento IN ('PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO')
-      )
+      WHERE
+        NOT EXISTS (
+          SELECT 1 FROM agendamentos a
+          WHERE a.contato_id = c.id
+          AND a.status_atendimento IN ('PENDENTE', 'EM ATENDIMENTO')
+        )
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM agendamentos a
+            WHERE a.contato_id = c.id
+            AND a.status_atendimento IN ('AGENDADO', 'FINALIZADO')
+          )
+          OR
+          c.ultima_mensagem > (
+            SELECT MAX(COALESCE(a.data_atualizacao, a.data_criacao))
+            FROM agendamentos a
+            WHERE a.contato_id = c.id
+            AND a.status_atendimento IN ('AGENDADO', 'FINALIZADO')
+          )
+        )
       ORDER BY c.ultima_mensagem DESC
     `);
     res.json(rows);
