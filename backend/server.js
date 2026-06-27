@@ -1540,7 +1540,7 @@ async function cancelarNoItsaude(idItsaude) {
   let token = _itsaudeTokenExpira > Date.now() ? _itsaudeToken : await _loginItsaude();
   const url = `https://api.tisaude.com/api/schedule/status/update/${idItsaude}/-2`;
   const chamar = (t) => fetch(url, {
-    method: 'PUT',
+    method: 'POST',
     headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(10_000),
   });
@@ -1639,9 +1639,9 @@ app.get('/api/itsaude/testar/:id', verificarToken, apenasAdmin, async (req, res)
     steps.push(`token OK (${token.substring(0, 20)}...)`);
 
     const url = `https://api.tisaude.com/api/schedule/status/update/${req.params.id}/-2`;
-    steps.push(`chamando PUT ${url}`);
+    steps.push(`chamando POST ${url}`);
     const upResp = await fetch(url, {
-      method: 'PUT',
+      method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(10_000),
     });
