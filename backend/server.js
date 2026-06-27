@@ -1395,8 +1395,9 @@ app.post('/api/leads/:id/converter', verificarToken, async (req, res) => {
 // ============================================================
 app.post('/api/agendamentos/manual', verificarToken, async (req, res) => {
   const { nome, telefone } = req.body;
-  const tel = String(telefone || '').replace(/\D/g, '');
-  if (tel.length < 10 || tel.length > 13) return res.status(400).json({ erro: 'Telefone inválido. Use apenas dígitos (10–13).' });
+  let tel = String(telefone || '').replace(/\D/g, '');
+  if (tel.length === 10 || tel.length === 11) tel = '55' + tel;
+  if (tel.length < 12 || tel.length > 13) return res.status(400).json({ erro: 'Telefone inválido. Informe DDD + número (ex: 11999887766).' });
   const nomeFinal = (nome || '').trim() || tel;
 
   try {

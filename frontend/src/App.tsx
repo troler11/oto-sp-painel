@@ -378,7 +378,8 @@ export default function App() {
   const criarTicketManual = async (e: React.FormEvent) => {
     e.preventDefault();
     const tel = novoTicketForm.telefone.replace(/\D/g, '');
-    if (tel.length < 10 || tel.length > 13) { toast('Telefone inválido. Use apenas dígitos (10–13).', 'aviso'); return; }
+    const telNorm = (tel.length === 10 || tel.length === 11) ? '55' + tel : tel;
+    if (telNorm.length < 12 || telNorm.length > 13) { toast('Telefone inválido. Informe DDD + número (ex: 11999887766).', 'aviso'); return; }
     setCriandoTicket(true);
     try {
       const res = await fetchSeguro(`${API_URL}/agendamentos/manual`, { method: 'POST', body: JSON.stringify({ nome: novoTicketForm.nome.trim(), telefone: tel }) });
@@ -824,7 +825,7 @@ export default function App() {
                       <input
                         value={novoTicketForm.telefone}
                         onChange={e => setNovoTicketForm(f => ({ ...f, telefone: e.target.value }))}
-                        placeholder="5511999887766 (com DDI e DDD)"
+                        placeholder="Ex: 11999887766 (DDD + número)"
                         className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20"
                         autoFocus
                       />
