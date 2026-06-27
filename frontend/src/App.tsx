@@ -9,7 +9,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import {
   Activity, CheckCircle2, XCircle, CalendarDays, X,
-  AlertCircle, Target, ArrowRight, MessageSquare, Trash2, Download,
+  AlertCircle, Target, ArrowRight, MessageSquare, Trash2, Download, Edit2,
 } from 'lucide-react';
 
 import { AppContext } from './context/AppContext';
@@ -61,6 +61,7 @@ export default function App() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filtro, setFiltro] = useState('TRIAGEM');
+  const [editandoNomeLead, setEditandoNomeLead] = useState<{ id: number; valor: string } | null>(null);
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -378,6 +379,18 @@ export default function App() {
     if (res.ok) { setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, status_atendimento: 'FINALIZADO' } : a)); toast('Consulta finalizada!', 'sucesso'); adicionarNotificacao('Consulta finalizada!', 'sucesso'); }
   };
 
+  const renomearAgendamento = async (id: number, novoNome: string) => {
+    const res = await fetchSeguro(`${API_URL}/agendamentos/${id}/nome`, { method: 'PATCH', body: JSON.stringify({ nome: novoNome }) });
+    if (res.ok) setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, nome_paciente: novoNome } : a));
+    else toast('Erro ao renomear.', 'erro');
+  };
+
+  const renomearLead = async (id: number, novoNome: string) => {
+    const res = await fetchSeguro(`${API_URL}/leads/${id}/nome`, { method: 'PATCH', body: JSON.stringify({ nome: novoNome }) });
+    if (res.ok) setLeads(prev => prev.map(l => l.id === id ? { ...l, nome_titular: novoNome } : l));
+    else toast('Erro ao renomear.', 'erro');
+  };
+
   const iniciarCancelamento = (paciente: Agendamento) => { setPacienteCancelamento(paciente); setMotivoCancelamento(''); setModalCancelamentoAberto(true); };
 
   const confirmarCancelamento = async (e: React.FormEvent) => {
@@ -582,10 +595,30 @@ export default function App() {
                 {(lead.nome_titular || lead.nome_atendimento || lead.telefone).substring(0, 2).toUpperCase()}
               </div>
               <div>
-                <h3 className="font-bold text-slate-800 leading-tight">
-                  {lead.nome_titular || lead.nome_atendimento || lead.telefone}
-                  {lead.nome_titular && lead.nome_atendimento && <span className="font-normal text-slate-500"> ({lead.nome_atendimento})</span>}
-                </h3>
+                {editandoNomeLead?.id === lead.id ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      value={editandoNomeLead.valor}
+                      onChange={e => setEditandoNomeLead({ id: lead.id, valor: e.target.value })}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && editandoNomeLead.valor.trim().length >= 2) { renomearLead(lead.id, editandoNomeLead.valor.trim()); setEditandoNomeLead(null); }
+                        if (e.key === 'Escape') setEditandoNomeLead(null);
+                      }}
+                      className="text-sm font-bold text-slate-800 border-b border-[#11caa0] outline-none bg-transparent w-36"
+                      autoFocus
+                    />
+                    <button onClick={() => { if (editandoNomeLead.valor.trim().length >= 2) { renomearLead(lead.id, editandoNomeLead.valor.trim()); setEditandoNomeLead(null); } }} className="text-[#11caa0] hover:text-[#0e9f7e]"><CheckCircle2 size={13} /></button>
+                    <button onClick={() => setEditandoNomeLead(null)} className="text-slate-400 hover:text-red-400"><XCircle size={13} /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 group/nome">
+                    <h3 className="font-bold text-slate-800 leading-tight">
+                      {lead.nome_titular || lead.nome_atendimento || lead.telefone}
+                      {lead.nome_titular && lead.nome_atendimento && <span className="font-normal text-slate-500"> ({lead.nome_atendimento})</span>}
+                    </h3>
+                    <button onClick={() => setEditandoNomeLead({ id: lead.id, valor: lead.nome_titular || '' })} className="opacity-0 group-hover/nome:opacity-100 text-slate-300 hover:text-[#005088] transition-opacity" title="Editar nome"><Edit2 size={11} /></button>
+                  </div>
+                )}
                 {(lead.nome_atendimento || lead.nome_titular) && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
                 {!isTriage && lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{tempoAtras(lead.ultima_mensagem)}</p>
@@ -636,7 +669,7 @@ export default function App() {
 
     return lista.map(item => (
       <SortableCard key={item.id} id={String(item.id)}>
-        <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} />
+        <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} />
       </SortableCard>
     ));
   };

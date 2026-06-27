@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History, Check, X as XIcon } from 'lucide-react';
 import type { Agendamento } from '../types';
 import { formatarDataBr, formatarHoraBr, formatarHora, getUrgencia, getAvatarCor } from '../utils/helpers';
 import { useApp } from '../context/AppContext';
@@ -13,6 +13,7 @@ interface Props {
   onDevolver: (id: number) => void;
   onFinalizar: (id: number) => void;
   onTimeline: (item: Agendamento) => void;
+  onRenomear: (id: number, novoNome: string) => void;
 }
 
 function useTimerVivo(dataCriacao: string, ativo: boolean) {
@@ -32,8 +33,11 @@ function useTimerVivo(dataCriacao: string, ativo: boolean) {
   return tempo;
 }
 
-export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline }: Props) {
+export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear }: Props) {
   const { sessao } = useApp();
+  const [editandoNome, setEditandoNome] = useState(false);
+  const [nomeEditado, setNomeEditado] = useState(item.nome_paciente);
+  const inputNomeRef = useRef<HTMLInputElement>(null);
   const podeEditar = ['AGENDADO', 'EM ATENDIMENTO'].includes(item.status_atendimento) || sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const MEDICO_IGNORAR = ['qualquer', 'indiferente', 'a confirmar'];
   const medicoRaw = (['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.medico_final) ? item.medico_final : (item.nome_medico || '');
@@ -66,7 +70,28 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
             {item.nome_paciente.substring(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <h3 className="font-bold text-slate-800 leading-tight truncate">{item.nome_paciente}</h3>
+            {editandoNome ? (
+              <div className="flex items-center gap-1">
+                <input
+                  ref={inputNomeRef}
+                  value={nomeEditado}
+                  onChange={e => setNomeEditado(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && nomeEditado.trim().length >= 2) { onRenomear(item.id, nomeEditado.trim()); setEditandoNome(false); }
+                    if (e.key === 'Escape') { setNomeEditado(item.nome_paciente); setEditandoNome(false); }
+                  }}
+                  className="text-sm font-bold text-slate-800 border-b border-[#11caa0] outline-none bg-transparent w-32"
+                  autoFocus
+                />
+                <button onClick={() => { if (nomeEditado.trim().length >= 2) { onRenomear(item.id, nomeEditado.trim()); setEditandoNome(false); } }} className="text-[#11caa0] hover:text-[#0e9f7e]"><Check size={13} /></button>
+                <button onClick={() => { setNomeEditado(item.nome_paciente); setEditandoNome(false); }} className="text-slate-400 hover:text-red-400"><XIcon size={13} /></button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 group/nome">
+                <h3 className="font-bold text-slate-800 leading-tight truncate">{item.nome_paciente}</h3>
+                <button onClick={() => { setNomeEditado(item.nome_paciente); setEditandoNome(true); }} className="opacity-0 group-hover/nome:opacity-100 text-slate-300 hover:text-[#005088] transition-opacity" title="Editar nome"><Edit2 size={11} /></button>
+              </div>
+            )}
             {item.tipo_consulta && (
               <span className={`text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${item.tipo_consulta.toLowerCase().includes('cancelamento') ? 'bg-red-100 text-red-700' : item.tipo_consulta.toLowerCase().includes('retorno') ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
                 {item.tipo_consulta.replace(/_/g, ' ')}

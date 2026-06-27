@@ -1246,6 +1246,38 @@ app.put('/api/chat/:telefone/interromper-robo', verificarToken, async (req, res)
 });
 
 // ============================================================
+// RENOMEAR PACIENTE (agendamento) e TITULAR (lead/triagem)
+// ============================================================
+app.patch('/api/agendamentos/:id/nome', verificarToken, async (req, res) => {
+  const { nome } = req.body;
+  if (!validar.minLen(nome, 2)) return res.status(400).json({ erro: 'Nome muito curto.' });
+  try {
+    const { rowCount } = await pool.query(
+      'UPDATE agendamentos SET nome_paciente = $1 WHERE id = $2',
+      [nome.trim(), req.params.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ erro: 'Agendamento não encontrado.' });
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao renomear.' });
+  }
+});
+
+app.patch('/api/leads/:id/nome', verificarToken, async (req, res) => {
+  const { nome } = req.body;
+  if (!validar.minLen(nome, 2)) return res.status(400).json({ erro: 'Nome muito curto.' });
+  try {
+    const { rowCount } = await pool.query(
+      'UPDATE contatos_whatsapp SET nome_titular = $1 WHERE id = $2',
+      [nome.trim(), req.params.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ erro: 'Lead não encontrado.' });
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao renomear.' });
+  }
+});
+
 // LEADS: DESCARTAR E CONVERTER
 // ============================================================
 app.delete('/api/leads/:id', verificarToken, async (req, res) => {
