@@ -129,6 +129,7 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
       <div className="space-y-1 text-xs border-l-2 border-slate-100 pl-2.5 mb-4">
         <p className="text-slate-600"><span className="text-slate-400">CPF:</span> {item.cpf_paciente || 'N/A'}</p>
         {item.nascimento_paciente && <p className="text-slate-600"><span className="text-slate-400">Nasc:</span> {formatarDataBr(item.nascimento_paciente)}</p>}
+        {item.telefone && <p className="text-slate-600"><span className="text-slate-400">Tel:</span> {item.telefone}</p>}
         <p className="text-slate-600"><span className="text-slate-400">Entrada:</span> {formatarHora(item.data_criacao)}</p>
       </div>
 
