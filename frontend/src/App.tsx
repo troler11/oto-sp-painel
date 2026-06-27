@@ -9,7 +9,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import {
   Activity, CheckCircle2, XCircle, CalendarDays, X,
-  AlertCircle, Target, ArrowRight, MessageSquare, Trash2, Download, Edit2,
+  AlertCircle, Target, ArrowRight, MessageSquare, Trash2, Download, Edit2, Plus, Search, Check,
 } from 'lucide-react';
 
 import { AppContext } from './context/AppContext';
@@ -61,6 +61,9 @@ export default function App() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contatos, setContatos] = useState<Contato[]>([]);
+  const [searchContatos, setSearchContatos] = useState('');
+  const [novoContatoForm, setNovoContatoForm] = useState<{ aberto: boolean; telefone: string; nome: string }>({ aberto: false, telefone: '', nome: '' });
+  const [editandoContato, setEditandoContato] = useState<{ id: number; nome: string; telefone: string } | null>(null);
   const [filtro, setFiltro] = useState('TRIAGEM');
   const [editandoNomeLead, setEditandoNomeLead] = useState<{ id: number; valor: string } | null>(null);
   const [dataInicio, setDataInicio] = useState('');
@@ -561,10 +564,29 @@ export default function App() {
     );
   }
 
-  // ── bloquearContato ───────────────────────────────────────────
+  // ── contatos ──────────────────────────────────────────────────
   const bloquearContato = async (id: number, bloquear: boolean) => {
     const res = await fetchSeguro(`${API_URL}/contatos/${id}/bloquear`, { method: 'PATCH', body: JSON.stringify({ bloquear }) });
     if (res.ok) setContatos(prev => prev.map(c => c.id === id ? { ...c, status_robo: bloquear ? 'Bloqueado' : 'Robô' } : c));
+  };
+  const adicionarContato = async () => {
+    if (!novoContatoForm.telefone.trim()) return;
+    const res = await fetchSeguro(`${API_URL}/contatos`, { method: 'POST', body: JSON.stringify({ telefone: novoContatoForm.telefone, nome: novoContatoForm.nome }) });
+    if (res.ok) {
+      const novo = await res.json();
+      setContatos(prev => [novo, ...prev.filter(c => c.id !== novo.id)]);
+      setNovoContatoForm({ aberto: false, telefone: '', nome: '' });
+      toast('Contato adicionado.', 'sucesso');
+    }
+  };
+  const salvarEdicaoContato = async () => {
+    if (!editandoContato) return;
+    const res = await fetchSeguro(`${API_URL}/contatos/${editandoContato.id}`, { method: 'PATCH', body: JSON.stringify({ nome: editandoContato.nome, telefone: editandoContato.telefone }) });
+    if (res.ok) {
+      const atualizado = await res.json();
+      setContatos(prev => prev.map(c => c.id === atualizado.id ? atualizado : c));
+      setEditandoContato(null);
+    }
   };
 
   // ── App autenticado ───────────────────────────────────────────
@@ -744,31 +766,81 @@ export default function App() {
               </div>
             )}
 
-            {filtro === 'CONTATOS' ? (
+            {filtro === 'CONTATOS' ? (() => {
+              const contatosFiltrados = contatos.filter(c => {
+                const termo = searchContatos.toLowerCase();
+                return !termo || (c.nome_titular || c.nome_atendimento || '').toLowerCase().includes(termo) || c.telefone.includes(termo);
+              });
+              return (
               <div>
-                <div className="flex justify-between items-center mb-5">
-                  <p className="text-sm font-bold text-slate-500">{contatos.length} contatos</p>
+                {/* Toolbar */}
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="relative flex-1 max-w-xs">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input value={searchContatos} onChange={e => setSearchContatos(e.target.value)} placeholder="Buscar por nome ou telefone…"
+                      className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20 bg-white" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-400">{contatosFiltrados.length} contatos</p>
+                  <button onClick={() => setNovoContatoForm(f => ({ ...f, aberto: !f.aberto }))}
+                    className="flex items-center gap-2 bg-[#11caa0] hover:bg-[#0fb38a] text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm">
+                    <Plus size={15} /> Adicionar
+                  </button>
                 </div>
+
+                {/* Form de novo contato */}
+                {novoContatoForm.aberto && (
+                  <div className="bg-white border border-[#11caa0]/30 rounded-2xl p-4 mb-4 flex items-center gap-3 shadow-sm">
+                    <input value={novoContatoForm.telefone} onChange={e => setNovoContatoForm(f => ({ ...f, telefone: e.target.value }))}
+                      placeholder="Telefone (ex: 5511999887766)" onKeyDown={e => e.key === 'Enter' && adicionarContato()}
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20" />
+                    <input value={novoContatoForm.nome} onChange={e => setNovoContatoForm(f => ({ ...f, nome: e.target.value }))}
+                      placeholder="Nome (opcional)" onKeyDown={e => e.key === 'Enter' && adicionarContato()}
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20" />
+                    <button onClick={adicionarContato} className="p-2.5 bg-[#11caa0] hover:bg-[#0fb38a] text-white rounded-xl transition-colors"><Check size={16} /></button>
+                    <button onClick={() => setNovoContatoForm({ aberto: false, telefone: '', nome: '' })} className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-colors"><X size={16} /></button>
+                  </div>
+                )}
+
+                {/* Lista */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
-                  {contatos.length === 0 && <p className="p-8 text-center text-slate-400 font-medium">Nenhum contato encontrado.</p>}
-                  {contatos.map(c => {
+                  {contatosFiltrados.length === 0 && <p className="p-8 text-center text-slate-400 font-medium">Nenhum contato encontrado.</p>}
+                  {contatosFiltrados.map(c => {
                     const nome = c.nome_titular || c.nome_atendimento || c.telefone;
                     const bloqueado = c.status_robo === 'Bloqueado';
+                    const editando = editandoContato?.id === c.id;
                     return (
-                      <div key={c.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
+                      <div key={c.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors">
                         <div className={`w-10 h-10 ${getAvatarCor(nome)} text-white rounded-full flex items-center justify-center font-extrabold text-sm shrink-0`}>
                           {nome.substring(0, 2).toUpperCase()}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-800 text-sm truncate">{nome}</p>
-                          <p className="text-xs text-slate-400 font-medium">{c.telefone}</p>
-                        </div>
+                        {editando ? (
+                          <div className="flex-1 flex items-center gap-2 min-w-0">
+                            <input value={editandoContato.nome} onChange={e => setEditandoContato(ec => ec ? { ...ec, nome: e.target.value } : ec)}
+                              onKeyDown={e => { if (e.key === 'Enter') salvarEdicaoContato(); if (e.key === 'Escape') setEditandoContato(null); }}
+                              placeholder="Nome" className="w-36 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#11caa0]" autoFocus />
+                            <input value={editandoContato.telefone} onChange={e => setEditandoContato(ec => ec ? { ...ec, telefone: e.target.value } : ec)}
+                              onKeyDown={e => { if (e.key === 'Enter') salvarEdicaoContato(); if (e.key === 'Escape') setEditandoContato(null); }}
+                              placeholder="Telefone" className="w-40 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm outline-none focus:border-[#11caa0]" />
+                            <button onClick={salvarEdicaoContato} className="p-1.5 bg-[#11caa0] text-white rounded-lg"><Check size={14} /></button>
+                            <button onClick={() => setEditandoContato(null)} className="p-1.5 bg-slate-100 text-slate-600 rounded-lg"><X size={14} /></button>
+                          </div>
+                        ) : (
+                          <div className="flex-1 min-w-0 group flex items-center gap-2">
+                            <div className="min-w-0">
+                              <p className="font-bold text-slate-800 text-sm truncate">{nome}</p>
+                              <p className="text-xs text-slate-400 font-medium">{c.telefone}</p>
+                            </div>
+                            <button onClick={() => setEditandoContato({ id: c.id, nome: c.nome_titular || '', telefone: c.telefone })}
+                              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-[#005088] transition-all shrink-0">
+                              <Edit2 size={13} />
+                            </button>
+                          </div>
+                        )}
                         <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 ${bloqueado ? 'bg-red-100 text-red-600' : c.status_robo === 'Humano' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
                           {bloqueado ? 'Bloqueado' : c.status_robo === 'Humano' ? 'Humano' : 'Bot'}
                         </span>
                         <p className="text-[11px] text-slate-400 font-medium shrink-0 w-20 text-right">{tempoAtras(c.ultima_mensagem)}</p>
-                        <button
-                          onClick={() => bloquearContato(c.id, !bloqueado)}
+                        <button onClick={() => bloquearContato(c.id, !bloqueado)}
                           className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-xl transition-colors ${bloqueado ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-700' : 'bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600'}`}>
                           {bloqueado ? 'Desbloquear' : 'Bloquear Robô'}
                         </button>
@@ -777,7 +849,8 @@ export default function App() {
                   })}
                 </div>
               </div>
-            ) : filtro === 'RELATORIOS' ? (
+              );
+            })() : filtro === 'RELATORIOS' ? (
               <Dashboard agendamentos={agendamentos} leads={leads} />
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

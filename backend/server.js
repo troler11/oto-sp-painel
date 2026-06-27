@@ -1399,6 +1399,42 @@ app.patch('/api/contatos/:id/bloquear', verificarToken, async (req, res) => {
   }
 });
 
+app.post('/api/contatos', verificarToken, async (req, res) => {
+  const { telefone, nome } = req.body;
+  const tel = (telefone || '').replace(/\D/g, '');
+  if (!tel) return res.status(400).json({ erro: 'Telefone obrigatório.' });
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO contatos_whatsapp (telefone, nome_titular) VALUES ($1, $2)
+       ON CONFLICT (telefone) DO UPDATE SET nome_titular = EXCLUDED.nome_titular
+       RETURNING id, telefone, nome_titular, nome_atendimento, cpf_titular, status_robo, ultima_mensagem, data_cadastro, sessao_intencao`,
+      [tel, nome || null]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao adicionar contato.' });
+  }
+});
+
+app.patch('/api/contatos/:id', verificarToken, async (req, res) => {
+  const { nome, telefone } = req.body;
+  const tel = telefone ? telefone.replace(/\D/g, '') : null;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE contatos_whatsapp
+       SET nome_titular = COALESCE($1, nome_titular),
+           telefone     = COALESCE($2, telefone)
+       WHERE id = $3
+       RETURNING id, telefone, nome_titular, nome_atendimento, cpf_titular, status_robo, ultima_mensagem, data_cadastro, sessao_intencao`,
+      [nome ?? null, tel || null, req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ erro: 'Contato não encontrado.' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao editar contato.' });
+  }
+});
+
 // ============================================================
 // RELATÓRIOS AVANÇADOS
 // ============================================================
