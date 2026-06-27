@@ -1391,6 +1391,45 @@ app.post('/api/leads/:id/converter', verificarToken, async (req, res) => {
 });
 
 // ============================================================
+// CRIAR TICKET MANUAL (sem lead prévio)
+// ============================================================
+app.post('/api/agendamentos/manual', verificarToken, async (req, res) => {
+  const { nome, telefone } = req.body;
+  const tel = String(telefone || '').replace(/\D/g, '');
+  if (tel.length < 10 || tel.length > 13) return res.status(400).json({ erro: 'Telefone inválido. Use apenas dígitos (10–13).' });
+  const nomeFinal = (nome || '').trim() || tel;
+
+  try {
+    // Upsert contato
+    const contatoRes = await pool.query(`
+      INSERT INTO contatos_whatsapp (telefone, nome_titular, status_robo, data_cadastro)
+      VALUES ($1, $2, 'Humano', NOW())
+      ON CONFLICT (telefone) DO UPDATE SET
+        nome_titular = COALESCE(NULLIF(EXCLUDED.nome_titular, $2), contatos_whatsapp.nome_titular),
+        status_robo  = 'Humano'
+      RETURNING id, telefone, nome_titular
+    `, [tel, nomeFinal]);
+    const contato = contatoRes.rows[0];
+
+    await pool.query(`
+      INSERT INTO agendamentos (contato_id, nome_paciente, status_atendimento, intencao, especialidade, unidade, pagamento, para_terceiro)
+      VALUES ($1, $2, 'PENDENTE', 'Contato Ativo', 'Não informada', 'A Definir', 'A Combinar', false)
+    `, [contato.id, nomeFinal]);
+
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'CRIAR_TICKET_MANUAL', entidade: 'agendamentos', entidade_id: contato.id,
+      ip: req.ip
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.error('Erro ao criar ticket manual', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao criar ticket.' });
+  }
+});
+
+// ============================================================
 // CONTATOS
 // ============================================================
 app.get('/api/contatos', verificarToken, async (req, res) => {

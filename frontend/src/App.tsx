@@ -9,7 +9,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import {
   Activity, CheckCircle2, XCircle, CalendarDays, X,
-  AlertCircle, Target, ArrowRight, MessageSquare, Trash2, Download, Edit2, Plus, Search, Check,
+  AlertCircle, Target, ArrowRight, MessageSquare, Trash2, Download, Edit2, Plus, Search, Check, UserPlus,
 } from 'lucide-react';
 
 import { AppContext } from './context/AppContext';
@@ -129,6 +129,9 @@ export default function App() {
 
   const [modalGestaoUsuariosAberto, setModalGestaoUsuariosAberto] = useState(false);
   const [modalWahaAberto, setModalWahaAberto] = useState(false);
+  const [modalNovoTicketAberto, setModalNovoTicketAberto] = useState(false);
+  const [novoTicketForm, setNovoTicketForm] = useState({ nome: '', telefone: '' });
+  const [criandoTicket, setCriandoTicket] = useState(false);
   const [listaUsuarios, setListaUsuarios] = useState<Usuario[]>([]);
   const [editandoSenhaId, setEditandoSenhaId] = useState<number | null>(null);
   const [novaSenhaGestao, setNovaSenhaGestao] = useState('');
@@ -370,6 +373,24 @@ export default function App() {
       if (res.ok) { setLeads(prev => prev.filter(l => l.id !== lead.id)); buscarDados(); toast('Ficha criada com sucesso!', 'sucesso'); adicionarNotificacao('Ficha criada!', 'sucesso'); }
       else { const d = await res.json(); toast(d.erro || 'Falha ao converter.', 'erro'); }
     } catch (e) { toast('Erro de conexão.', 'erro'); }
+  };
+
+  const criarTicketManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const tel = novoTicketForm.telefone.replace(/\D/g, '');
+    if (tel.length < 10 || tel.length > 13) { toast('Telefone inválido. Use apenas dígitos (10–13).', 'aviso'); return; }
+    setCriandoTicket(true);
+    try {
+      const res = await fetchSeguro(`${API_URL}/agendamentos/manual`, { method: 'POST', body: JSON.stringify({ nome: novoTicketForm.nome.trim(), telefone: tel }) });
+      if (res.ok) {
+        setModalNovoTicketAberto(false);
+        setNovoTicketForm({ nome: '', telefone: '' });
+        await buscarDados();
+        setFiltro('PENDENTE');
+        toast('Ticket criado!', 'sucesso');
+      } else { const d = await res.json().catch(() => ({})); toast(d.erro || 'Falha ao criar ticket.', 'erro'); }
+    } catch { toast('Erro de conexão.', 'erro'); }
+    setCriandoTicket(false);
   };
 
   // ── Atendimentos ──────────────────────────────────────────────
@@ -770,14 +791,66 @@ export default function App() {
 
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
             {!['RELATORIOS', 'LEADS', 'CONTATOS'].includes(filtro) && (
-              <div className="flex gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm mb-6 overflow-x-auto scrollbar-hide">
-                {ABAS.map(aba => (
-                  <button key={aba} onClick={() => setFiltro(aba)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs transition-all whitespace-nowrap ${filtro === aba ? 'bg-[#005088] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-                    {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
-                    {(contagens[aba] ?? 0) > 0 && <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filtro === aba ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagens[aba]}</span>}
-                  </button>
-                ))}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 flex gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto scrollbar-hide">
+                  {ABAS.map(aba => (
+                    <button key={aba} onClick={() => setFiltro(aba)}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs transition-all whitespace-nowrap ${filtro === aba ? 'bg-[#005088] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
+                      {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
+                      {(contagens[aba] ?? 0) > 0 && <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filtro === aba ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagens[aba]}</span>}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setModalNovoTicketAberto(true)}
+                  className="flex items-center gap-2 bg-[#11caa0] hover:bg-[#0fb38a] text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm shrink-0">
+                  <UserPlus size={15} /> Novo Ticket
+                </button>
+              </div>
+            )}
+
+            {modalNovoTicketAberto && (
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setModalNovoTicketAberto(false)}>
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-slide-up">
+                  <div className="flex items-center justify-between mb-5">
+                    <div>
+                      <h2 className="text-lg font-extrabold text-[#005088]">Novo Ticket</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">Cria um ticket PENDENTE e libera o chat para contato ativo</p>
+                    </div>
+                    <button onClick={() => setModalNovoTicketAberto(false)} className="p-2 hover:bg-slate-100 rounded-xl text-slate-400"><X size={18} /></button>
+                  </div>
+                  <form onSubmit={criarTicketManual} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">Telefone <span className="text-red-500">*</span></label>
+                      <input
+                        value={novoTicketForm.telefone}
+                        onChange={e => setNovoTicketForm(f => ({ ...f, telefone: e.target.value }))}
+                        placeholder="5511999887766 (com DDI e DDD)"
+                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1.5">Nome do paciente <span className="text-slate-400 font-normal">(opcional)</span></label>
+                      <input
+                        value={novoTicketForm.nome}
+                        onChange={e => setNovoTicketForm(f => ({ ...f, nome: e.target.value }))}
+                        placeholder="Ex: João Silva"
+                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20"
+                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && criarTicketManual(e as unknown as React.FormEvent)}
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-1">
+                      <button type="button" onClick={() => setModalNovoTicketAberto(false)}
+                        className="flex-1 py-3 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                        Cancelar
+                      </button>
+                      <button type="submit" disabled={criandoTicket || !novoTicketForm.telefone.trim()}
+                        className="flex-[2] py-3 bg-gradient-to-r from-[#005088] to-[#003a66] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2">
+                        {criandoTicket ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Criando...</> : <><UserPlus size={15} /> Criar Ticket</>}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               </div>
             )}
 
