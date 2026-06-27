@@ -909,7 +909,7 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
 
   const cacheKey = `itsaude-classif:${req.params.id}`;
   const cached = getCache(cacheKey);
-  if (cached !== undefined) return res.json(cached);
+  if (cached !== null) return res.json(cached);
 
   try {
     const leadRes = await pool.query('SELECT telefone FROM contatos_whatsapp WHERE id = $1', [req.params.id]);
