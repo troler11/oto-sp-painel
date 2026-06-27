@@ -126,7 +126,7 @@ const loginLimiter = rateLimit({
 // VARIÁVEIS DE AMBIENTE
 // ============================================================
 const WAHA_API_URL    = process.env.WAHA_API_URL;
-const WAHA_SESSION    = process.env.WAHA_SESSION || 'default';
+const WAHA_SESSION    = process.env.WAHA_SESSION || 'teste';
 const WAHA_API_KEY    = process.env.WAHA_API_KEY;
 const WAHA_BASE_URL   = WAHA_API_URL ? (() => { try { return new URL(WAHA_API_URL).origin; } catch { return null; } })() : null;
 const JWT_SECRET      = process.env.JWT_SECRET;
