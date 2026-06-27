@@ -1,7 +1,8 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip } from 'lucide-react';
 import type { ModeloMensagem, MensagemChat, PacienteChat } from '../types';
 import { useApp } from '../context/AppContext';
+import { useProfilePic } from '../hooks/useProfilePic';
 
 interface Props {
   pacienteAtivoChat: PacienteChat;
@@ -26,6 +27,8 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
+  const fotoPerfil = useProfilePic(pacienteAtivoChat.telefone);
+  const [fotoErro, setFotoErro] = useState(false);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
 
@@ -33,9 +36,13 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
     <aside className="fixed right-0 top-0 h-screen w-[400px] bg-white border-l border-slate-200 shadow-2xl flex flex-col z-[60] animate-slide-up">
       <div className="p-4 bg-gradient-to-r from-[#005088] to-[#003a66] text-white flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 bg-white/15 border border-white/20 rounded-full flex items-center justify-center font-extrabold text-base">
-            {pacienteAtivoChat.nome_paciente?.substring(0, 2).toUpperCase()}
-          </div>
+          {fotoPerfil && !fotoErro ? (
+            <img src={fotoPerfil} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white/30" onError={() => setFotoErro(true)} />
+          ) : (
+            <div className="w-11 h-11 bg-white/15 border border-white/20 rounded-full flex items-center justify-center font-extrabold text-base">
+              {pacienteAtivoChat.nome_paciente?.substring(0, 2).toUpperCase()}
+            </div>
+          )}
           <div>
             <p className="font-extrabold truncate w-44">{pacienteAtivoChat.nome_paciente}</p>
             <p className="text-[11px] text-[#11caa0] font-bold flex items-center gap-1 mt-0.5">
