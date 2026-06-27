@@ -882,31 +882,12 @@ app.get('/api/leads', verificarToken, async (req, res) => {
           AND a.status_atendimento IN ('PENDENTE', 'EM ATENDIMENTO')
         )
         AND (
-          NOT EXISTS (
-            SELECT 1 FROM agendamentos a
-            WHERE a.contato_id = c.id
-            AND a.status_atendimento = 'AGENDADO'
-          )
+          NOT EXISTS (SELECT 1 FROM agendamentos a WHERE a.contato_id = c.id)
           OR
           c.ultima_mensagem > (
             SELECT MAX(a.data_atendimento)
             FROM agendamentos a
             WHERE a.contato_id = c.id
-            AND a.status_atendimento = 'AGENDADO'
-          )
-        )
-        AND (
-          NOT EXISTS (
-            SELECT 1 FROM agendamentos a
-            WHERE a.contato_id = c.id
-            AND a.status_atendimento = 'FINALIZADO'
-          )
-          OR
-          c.ultima_mensagem > (
-            SELECT MAX(a.data_atendimento)
-            FROM agendamentos a
-            WHERE a.contato_id = c.id
-            AND a.status_atendimento = 'FINALIZADO'
           )
         )
         AND c.status_robo != 'Bloqueado'
