@@ -56,11 +56,14 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
         {mensagens.map((msg, idx) => {
-          // Se contiver [Mensagem original: TEXTO], exibe só o TEXTO e ignora o resto
+          // Padrões que extraem só o valor e ignoram o resto da mensagem
           const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
+          const aceitoMatch = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
           // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
           const textoFinal = msgOriginalMatch
             ? msgOriginalMatch[1].trim()
+            : aceitoMatch
+            ? aceitoMatch[1].trim()
             : msg.texto
                 .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
                 .replace(/\[[A-Z][A-Z0-9_ ]*:[^\]]*\]/g, '')
