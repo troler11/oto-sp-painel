@@ -946,19 +946,23 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
     const hoje = new Date().toISOString().slice(0, 10);
     const tresAnosAtras = new Date(Date.now() - 3 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const tResp = await fetch(
-      `https://api.tisaude.com/api/patients/${paciente.id}/timeline?startDate=${tresAnosAtras}&endDate=${hoje}`,
+      `https://api.tisaude.com/api/patients/${paciente.id}/timeline?startDate=${tresAnosAtras}&endDate=${hoje}&page=1`,
       { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8_000) }
     );
 
     let totalConsultas = 0;
     if (tResp.ok) {
       const tData = await tResp.json();
-      logger.info('iTSaude timeline raw', { paciente_id: paciente.id, tData: JSON.stringify(tData).slice(0, 2000) });
-      for (const dia of (tData.data || [])) {
-        for (const ev of (dia.data || [])) {
-          if (ev.type !== 'appointment') continue;
-          if ((ev.status?.name || '').toLowerCase().includes('desmarcado')) continue;
-          totalConsultas++;
+      // Se há mais de uma página, o paciente tem histórico — conta como recorrente
+      if ((tData.current_page || 1) > 1 || tData.prev_page_url) {
+        totalConsultas = 999;
+      } else {
+        for (const dia of (tData.data || [])) {
+          for (const ev of (dia.data || [])) {
+            if (ev.type !== 'appointment') continue;
+            if ((ev.status?.name || '').toLowerCase().includes('desmarcado')) continue;
+            totalConsultas++;
+          }
         }
       }
     }
