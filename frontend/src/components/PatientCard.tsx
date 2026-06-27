@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useProfilePic } from '../hooks/useProfilePic';
 import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History, Check, X as XIcon } from 'lucide-react';
 import type { Agendamento } from '../types';
 import { formatarDataBr, formatarHoraBr, formatarHora, getUrgencia, getAvatarCor } from '../utils/helpers';
@@ -46,6 +47,8 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
   const isPendente = item.status_atendimento === 'PENDENTE';
   const timerVivo = useTimerVivo(item.data_criacao, isPendente);
   const avatarCor = getAvatarCor(item.nome_paciente);
+  const fotoPerfil = useProfilePic(item.telefone);
+  const [fotoErro, setFotoErro] = useState(false);
 
   const corBorda = isPendente
     ? urgencia === 'alta' ? 'border-red-300 shadow-red-50' : urgencia === 'media' ? 'border-amber-200' : 'border-slate-200'
@@ -66,9 +69,13 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
-          <div className={`w-10 h-10 rounded-full ${avatarCor} text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-sm`}>
-            {item.nome_paciente.substring(0, 2).toUpperCase()}
-          </div>
+          {fotoPerfil && !fotoErro ? (
+            <img src={fotoPerfil} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm" onError={() => setFotoErro(true)} />
+          ) : (
+            <div className={`w-10 h-10 rounded-full ${avatarCor} text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-sm`}>
+              {item.nome_paciente.substring(0, 2).toUpperCase()}
+            </div>
+          )}
           <div className="min-w-0">
             {editandoNome ? (
               <div className="flex items-center gap-1">

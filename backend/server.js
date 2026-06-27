@@ -1421,6 +1421,31 @@ app.patch('/api/contatos/:id/bloquear', verificarToken, async (req, res) => {
   }
 });
 
+app.get('/api/contatos/:telefone/foto', verificarToken, async (req, res) => {
+  if (!WAHA_BASE_URL) return res.status(503).end();
+  const tel = req.params.telefone.replace(/\D/g, '');
+  const cacheKey = `foto:${tel}`;
+  const cached = getCache(cacheKey);
+  if (cached !== undefined) {
+    return cached ? res.json({ url: cached }) : res.status(404).end();
+  }
+  try {
+    const resp = await fetch(
+      `${WAHA_BASE_URL}/api/contacts/profile-picture?contactId=${tel}@s.whatsapp.net&session=${WAHA_SESSION}`,
+      { headers: wahaHeaders(), signal: AbortSignal.timeout(5_000) }
+    );
+    if (!resp.ok) { setCache(cacheKey, null, 60 * 60 * 1000); return res.status(404).end(); }
+    const data = await resp.json();
+    const url = data.eurl || data.profilePictureUrl || null;
+    setCache(cacheKey, url, 60 * 60 * 1000);
+    if (!url) return res.status(404).end();
+    res.json({ url });
+  } catch {
+    setCache(cacheKey, null, 60 * 60 * 1000);
+    res.status(404).end();
+  }
+});
+
 app.post('/api/contatos', verificarToken, async (req, res) => {
   const { telefone, nome } = req.body;
   const tel = (telefone || '').replace(/\D/g, '');

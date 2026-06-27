@@ -17,6 +17,15 @@ import type { Sessao, Agendamento, Lead, Contato, Notificacao, ModeloMensagem, U
 import { tempoAtras, getAvatarCor } from './utils/helpers';
 import { useConfirm } from './hooks/useConfirm';
 import { useToast } from './hooks/useToast';
+import { useProfilePic } from './hooks/useProfilePic';
+
+function ProfileAvatar({ telefone, nome, size = 'w-10 h-10' }: { telefone: string; nome: string; size?: string }) {
+  const foto = useProfilePic(telefone);
+  const [erro, setErro] = useState(false);
+  const cor = getAvatarCor(nome);
+  if (foto && !erro) return <img src={foto} alt="" className={`${size} rounded-full object-cover shrink-0 shadow-sm`} onError={() => setErro(true)} />;
+  return <div className={`${size} rounded-full ${cor} text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-sm`}>{nome.substring(0, 2).toUpperCase()}</div>;
+}
 
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -328,9 +337,9 @@ export default function App() {
         };
         reader.readAsDataURL(file);
       } else {
-        adicionarNotificacao('Erro ao enviar arquivo.', 'erro');
+        adicionarNotificacao('Erro ao enviar arquivo.', 'aviso');
       }
-    } catch { adicionarNotificacao('Erro ao enviar arquivo.', 'erro'); }
+    } catch { adicionarNotificacao('Erro ao enviar arquivo.', 'aviso'); }
     finally { setEnviandoMidia(false); }
   };
 
@@ -643,9 +652,7 @@ export default function App() {
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
           <div className="flex justify-between items-start mb-3">
             <div className="flex items-center gap-2.5">
-              <div className={`w-10 h-10 ${getAvatarCor(lead.nome_titular || lead.nome_atendimento || lead.telefone)} text-white rounded-full flex items-center justify-center font-extrabold text-sm shrink-0 shadow-sm`}>
-                {(lead.nome_titular || lead.nome_atendimento || lead.telefone).substring(0, 2).toUpperCase()}
-              </div>
+              <ProfileAvatar telefone={lead.telefone} nome={lead.nome_titular || lead.nome_atendimento || lead.telefone} />
               <div>
                 {editandoNomeLead?.id === lead.id ? (
                   <div className="flex items-center gap-1">
@@ -827,9 +834,7 @@ export default function App() {
                     const editando = editandoContato?.id === c.id;
                     return (
                       <div key={c.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                        <div className={`w-10 h-10 ${getAvatarCor(nome)} text-white rounded-full flex items-center justify-center font-extrabold text-sm shrink-0`}>
-                          {nome.substring(0, 2).toUpperCase()}
-                        </div>
+                        <ProfileAvatar telefone={c.telefone} nome={nome} />
                         {editando ? (
                           <div className="flex-1 flex items-center gap-2 min-w-0">
                             <input value={editandoContato.nome} onChange={e => setEditandoContato(ec => ec ? { ...ec, nome: e.target.value } : ec)}
