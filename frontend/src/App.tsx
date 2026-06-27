@@ -87,6 +87,7 @@ export default function App() {
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const [novaMensagem, setNovaMensagem] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
+  const [enviandoMidia, setEnviandoMidia] = useState(false);
   const [digitando, setDigitando] = useState(false);
 
   // ── Modelos ───────────────────────────────────────────────────
@@ -292,6 +293,23 @@ export default function App() {
       const res = await fetchSeguro(`${API_URL}/chat/enviar`, { method: 'POST', body: JSON.stringify({ telefone: pacienteAtivoChat.telefone, texto: novaMensagem }) });
       if (res.ok) { setMensagens(prev => [...prev, { texto: novaMensagem, origem: 'ia_ou_recepcao', data: new Date().toISOString() }]); setNovaMensagem(''); }
     } catch (e) { /* silencioso */ } finally { setEnviandoMensagem(false); }
+  };
+
+  const enviarMidiaChat = async (file: File) => {
+    if (!pacienteAtivoChat?.telefone || pacienteAtivoChat.bloquearEnvio) return;
+    setEnviandoMidia(true);
+    try {
+      const form = new FormData();
+      form.append('arquivo', file);
+      form.append('telefone', pacienteAtivoChat.telefone);
+      const res = await fetch(`${API_URL}/chat/enviar-midia`, { method: 'POST', credentials: 'include', body: form });
+      if (res.ok) {
+        setMensagens(prev => [...prev, { texto: `📎 ${file.name}`, origem: 'ia_ou_recepcao', data: new Date().toISOString() }]);
+      } else {
+        adicionarNotificacao('Erro ao enviar arquivo.', 'erro');
+      }
+    } catch { adicionarNotificacao('Erro ao enviar arquivo.', 'erro'); }
+    finally { setEnviandoMidia(false); }
   };
 
   const interromperRobo = async (telefone: string) => {
@@ -702,7 +720,7 @@ export default function App() {
         </main>
 
         {chatAberto && pacienteAtivoChat && (
-          <ChatPanel pacienteAtivoChat={pacienteAtivoChat} mensagens={mensagens} novaMensagem={novaMensagem} setNovaMensagem={setNovaMensagem} enviandoMensagem={enviandoMensagem} digitando={digitando} modelos={modelos} dropdownModelosAberto={dropdownModelosAberto} setDropdownModelosAberto={setDropdownModelosAberto} onClose={() => { setChatAberto(false); setDropdownModelosAberto(false); }} onEnviar={enviarMensagemChat} onInterromperRobo={interromperRobo} onAbrirModelos={() => { setModalModelosAberto(true); setDropdownModelosAberto(false); }} onEditarModelo={abrirEdicaoModelo} onRemoverModelo={removerModelo} />
+          <ChatPanel pacienteAtivoChat={pacienteAtivoChat} mensagens={mensagens} novaMensagem={novaMensagem} setNovaMensagem={setNovaMensagem} enviandoMensagem={enviandoMensagem} digitando={digitando} modelos={modelos} dropdownModelosAberto={dropdownModelosAberto} setDropdownModelosAberto={setDropdownModelosAberto} onClose={() => { setChatAberto(false); setDropdownModelosAberto(false); }} onEnviar={enviarMensagemChat} onEnviarMidia={enviarMidiaChat} enviandoMidia={enviandoMidia} onInterromperRobo={interromperRobo} onAbrirModelos={() => { setModalModelosAberto(true); setDropdownModelosAberto(false); }} onEditarModelo={abrirEdicaoModelo} onRemoverModelo={removerModelo} />
         )}
 
         {pacienteTimeline && <PatientTimeline paciente={pacienteTimeline} onClose={() => setPacienteTimeline(null)} />}

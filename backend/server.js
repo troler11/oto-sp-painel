@@ -18,6 +18,8 @@ const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Server: SocketServer } = require('socket.io');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
 
@@ -1198,6 +1200,30 @@ app.post('/api/chat/enviar', verificarToken, async (req, res) => {
   }
 });
 
+app.post('/api/chat/enviar-midia', verificarToken, upload.single('arquivo'), async (req, res) => {
+  const { telefone } = req.body;
+  if (!req.file) return res.status(400).json({ erro: 'Arquivo não recebido.' });
+  if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA não configurado.' });
+
+  const telefoneLimpo = telefone.replace(/\D/g, '');
+  const base64 = req.file.buffer.toString('base64');
+  const filename = req.file.originalname;
+  const mimetype = req.file.mimetype;
+
+  try {
+    await enviarWhatsAppMidia(telefoneLimpo, base64, mimetype, filename);
+    const msgData = { type: 'ai', content: `📎 ${filename}`, additional_kwargs: { sender: req.user.nome } };
+    await pool.query(
+      'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+      [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+    );
+    res.json({ sucesso: true, filename });
+  } catch (err) {
+    logger.error('Erro ao enviar mídia', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao enviar arquivo.' });
+  }
+});
+
 app.put('/api/chat/:telefone/interromper-robo', verificarToken, async (req, res) => {
   const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
   try {
@@ -1354,6 +1380,24 @@ async function enviarWhatsApp(telefone, texto) {
   } catch (err) {
     logger.error('Falha ao enviar WhatsApp', { error: err.message, telefone });
   }
+}
+
+async function enviarWhatsAppMidia(telefone, base64, mimetype, filename) {
+  if (!WAHA_BASE_URL) return;
+  const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+  if (WAHA_API_KEY) headers['X-Api-Key'] = WAHA_API_KEY;
+
+  const resp = await fetch(`${WAHA_BASE_URL}/api/sendFile`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      session: WAHA_SESSION,
+      chatId: `${telefone}@c.us`,
+      file: { data: base64, name: filename, mimetype },
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!resp.ok) logger.warn('WAHA mídia retornou erro', { status: resp.status, telefone });
 }
 
 // ============================================================

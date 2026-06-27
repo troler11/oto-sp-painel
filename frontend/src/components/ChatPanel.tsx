@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send } from 'lucide-react';
+import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip } from 'lucide-react';
 import type { ModeloMensagem, MensagemChat, PacienteChat } from '../types';
 import { useApp } from '../context/AppContext';
 
@@ -13,15 +13,18 @@ interface Props {
   dropdownModelosAberto: boolean; setDropdownModelosAberto: (v: boolean) => void;
   onClose: () => void;
   onEnviar: (e: React.FormEvent) => void;
+  onEnviarMidia: (file: File) => void;
+  enviandoMidia?: boolean;
   onInterromperRobo: (telefone: string) => void;
   onAbrirModelos: () => void;
   onEditarModelo: (m: ModeloMensagem) => void;
   onRemoverModelo: (id: number) => void;
 }
 
-export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onInterromperRobo, onAbrirModelos, onEditarModelo, onRemoverModelo }: Props) {
+export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onEnviarMidia, enviandoMidia, onInterromperRobo, onAbrirModelos, onEditarModelo, onRemoverModelo }: Props) {
   const { sessao } = useApp();
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
@@ -129,6 +132,21 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
         </div>
 
         <form onSubmit={onEnviar} className="flex items-center gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"
+            onChange={e => { const f = e.target.files?.[0]; if (f) { onEnviarMidia(f); e.target.value = ''; } }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={pacienteAtivoChat.bloquearEnvio || enviandoMidia}
+            title="Enviar arquivo ou imagem"
+            className="p-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl disabled:opacity-50 transition-all shrink-0">
+            {enviandoMidia ? <RefreshCw className="animate-spin" size={18} /> : <Paperclip size={18} />}
+          </button>
           <input type="text" value={novaMensagem} onChange={e => setNovaMensagem(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEnviar(e as unknown as React.FormEvent); } }}
             placeholder={pacienteAtivoChat.bloquearEnvio ? 'Apenas leitura...' : 'Enter para enviar · Shift+Enter nova linha'}
