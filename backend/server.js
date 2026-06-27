@@ -1194,11 +1194,11 @@ app.put('/api/agendar', verificarToken, async (req, res) => {
 // ============================================================
 app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
   const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
-  const desde = req.query.desde as string | undefined;
+  const desde = req.query.desde;
   try {
     // LIKE '5511997255184%' cobre todos os formatos: bare, @s.whatsapp.net,
     // -v23-UUID e variantes com dígitos extras gravadas por versões anteriores
-    const params: (string | Date)[] = [`${telefoneLimpo}%`];
+    const params = [`${telefoneLimpo}%`];
     let filtroDesde = '';
     if (desde) { filtroDesde = ` AND created_at > $2`; params.push(new Date(desde)); }
     const { rows } = await pool.query(
