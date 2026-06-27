@@ -150,8 +150,9 @@ export default function App() {
     const poll = setInterval(async () => {
       try {
         const desde = ultimaMsgDataRef.current;
+        // +1ms evita loop por diferença microsegundo (Postgres) vs milissegundo (JS)
         const url = desde
-          ? `${API_URL}/chat/${tel}?desde=${encodeURIComponent(desde)}`
+          ? `${API_URL}/chat/${tel}?desde=${encodeURIComponent(new Date(new Date(desde).getTime() + 1).toISOString())}`
           : `${API_URL}/chat/${tel}`;
         const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) return;
