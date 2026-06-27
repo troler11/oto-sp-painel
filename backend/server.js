@@ -132,6 +132,8 @@ const WAHA_BASE_URL   = WAHA_API_URL ? (() => { try { return new URL(WAHA_API_UR
 const JWT_SECRET      = process.env.JWT_SECRET;
 const REFRESH_SECRET  = process.env.REFRESH_SECRET;
 const WEBHOOK_SECRET  = process.env.WEBHOOK_SECRET;
+const ITSAUDE_LOGIN   = process.env.ITSAUDE_LOGIN;
+const ITSAUDE_SENHA   = process.env.ITSAUDE_SENHA;
 
 if (!JWT_SECRET || !REFRESH_SECRET) {
   console.error(JSON.stringify({ level: 'ERROR', message: 'JWT_SECRET e REFRESH_SECRET devem estar definidos nas variáveis de ambiente. O servidor não iniciará sem eles.' }));
@@ -1008,10 +1010,11 @@ app.put('/api/status', verificarToken, async (req, res) => {
     if (data_cancelamento)  { query += `, data_cancelamento = $${p++}`;  params.push(data_cancelamento); }
 
     query += `, data_atualizacao = NOW()`;
-    query += ` WHERE id = $${p} RETURNING contato_id, nome_paciente, especialidade, unidade`;
+    query += ` WHERE id = $${p} RETURNING contato_id, nome_paciente, especialidade, unidade, coleta_id_tisaude`;
     params.push(id);
 
     const { rows: agendados } = await pool.query(query, params);
+    let avisoItsaude = null;
 
     // Assumir ficha → pausa o bot para a equipe poder conversar
     if (status === 'EM ATENDIMENTO' && agendados.length > 0) {
@@ -1055,6 +1058,16 @@ app.put('/api/status', verificarToken, async (req, res) => {
         const msg = `Olá, *${ag.nome_paciente}*.\n\nInfelizmente a sua consulta precisou ser *CANCELADA* ❌.\n\nPara remarcar, envie uma nova mensagem.`;
         await enviarWhatsApp(tel, msg);
       }
+
+      if (ag.coleta_id_tisaude) {
+        try {
+          await cancelarNoItsaude(ag.coleta_id_tisaude);
+          logger.info('Consulta cancelada no iTSaúde', { id_itsaude: ag.coleta_id_tisaude });
+        } catch (e) {
+          logger.error('Falha ao cancelar no iTSaúde', { error: e.message, id_itsaude: ag.coleta_id_tisaude });
+          avisoItsaude = 'Falha ao cancelar no iTSaúde — verifique manualmente.';
+        }
+      }
     }
 
     // Finalizar ficha → reativa bot e limpa dados de coleta para próximo atendimento
@@ -1093,7 +1106,7 @@ app.put('/api/status', verificarToken, async (req, res) => {
       observacoes: observacoes || undefined,
     });
 
-    res.json({ sucesso: true });
+    res.json({ sucesso: true, ...(avisoItsaude ? { avisoItsaude } : {}) });
   } catch (err) {
     logger.error('Erro ao atualizar status', { error: err.message });
     res.status(500).json({ erro: 'Erro ao atualizar status.' });
@@ -1501,7 +1514,47 @@ app.get('/api/relatorios/evolucao-diaria', verificarToken, async (req, res) => {
 });
 
 // ============================================================
-// HELPER: ENVIAR WHATSAPP
+// HELPER: ITSAUDE
+// ============================================================
+let _itsaudeToken = null;
+let _itsaudeTokenExpira = 0;
+
+async function _loginItsaude() {
+  const resp = await fetch('https://api.tisaude.com/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ login: ITSAUDE_LOGIN, senha: ITSAUDE_SENHA }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!resp.ok) throw new Error(`iTSaúde login ${resp.status}`);
+  const data = await resp.json();
+  const token = data.token || data.access_token || data.data?.token || data.accessToken;
+  if (!token) throw new Error('iTSaúde: campo token não encontrado na resposta do login');
+  _itsaudeToken = token;
+  _itsaudeTokenExpira = Date.now() + 50 * 60 * 1000; // cache 50min
+  return token;
+}
+
+async function cancelarNoItsaude(idItsaude) {
+  if (!ITSAUDE_LOGIN || !ITSAUDE_SENHA) return;
+  let token = _itsaudeTokenExpira > Date.now() ? _itsaudeToken : await _loginItsaude();
+  const url = `https://api.tisaude.com/api/schedule/status/update/${idItsaude}/-2`;
+  const chamar = (t) => fetch(url, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(10_000),
+  });
+  let resp = await chamar(token);
+  if (resp.status === 401) {
+    token = await _loginItsaude();
+    resp = await chamar(token);
+  }
+  if (!resp.ok) {
+    const corpo = await resp.text().catch(() => '');
+    throw new Error(`iTSaúde ${resp.status}: ${corpo}`);
+  }
+}
+
 // ============================================================
 async function enviarWhatsApp(telefone, texto) {
   if (!WAHA_API_URL) {

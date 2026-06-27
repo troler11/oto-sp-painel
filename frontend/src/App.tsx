@@ -407,7 +407,13 @@ export default function App() {
     e.preventDefault(); if (!pacienteCancelamento) return;
     const agora = new Date().toISOString();
     const res = await fetchSeguro(`${API_URL}/status`, { method: 'PUT', body: JSON.stringify({ id: pacienteCancelamento.id, status: 'CANCELADO', observacoes: motivoCancelamento, notificar: pacienteCancelamento.status_atendimento === 'AGENDADO', data_cancelamento: agora }) });
-    if (res.ok) { setAgendamentos(prev => prev.map(a => a.id === pacienteCancelamento.id ? { ...a, status_atendimento: 'CANCELADO', observacoes: motivoCancelamento, data_cancelamento: agora } : a)); setModalCancelamentoAberto(false); toast('Consulta cancelada.', 'aviso'); }
+    if (res.ok) {
+      const data = await res.json();
+      setAgendamentos(prev => prev.map(a => a.id === pacienteCancelamento.id ? { ...a, status_atendimento: 'CANCELADO', observacoes: motivoCancelamento, data_cancelamento: agora } : a));
+      setModalCancelamentoAberto(false);
+      toast('Consulta cancelada.', 'aviso');
+      if (data.avisoItsaude) toast(data.avisoItsaude, 'aviso');
+    }
   };
 
   // ── Drag & Drop ───────────────────────────────────────────────
