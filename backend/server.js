@@ -878,16 +878,22 @@ app.get('/api/leads', verificarToken, async (req, res) => {
       WHERE
         NOT EXISTS (
           SELECT 1 FROM agendamentos a
-          WHERE a.contato_id = c.id
+          JOIN contatos_whatsapp c2 ON c2.id = a.contato_id
+          WHERE c2.telefone = c.telefone
           AND a.status_atendimento IN ('PENDENTE', 'EM ATENDIMENTO')
         )
         AND (
-          NOT EXISTS (SELECT 1 FROM agendamentos a WHERE a.contato_id = c.id)
+          NOT EXISTS (
+            SELECT 1 FROM agendamentos a
+            JOIN contatos_whatsapp c2 ON c2.id = a.contato_id
+            WHERE c2.telefone = c.telefone
+          )
           OR
           c.ultima_mensagem > (
             SELECT MAX(a.data_atendimento)
             FROM agendamentos a
-            WHERE a.contato_id = c.id
+            JOIN contatos_whatsapp c2 ON c2.id = a.contato_id
+            WHERE c2.telefone = c.telefone
           )
         )
         AND c.status_robo != 'Bloqueado'
