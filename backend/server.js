@@ -251,6 +251,15 @@ const criarTabelasExtras = async () => {
     // Resincroniza o sequence do id caso tenha sido inserido manualmente
     await pool.query(`SELECT setval(pg_get_serial_sequence('usuarios', 'id'), COALESCE(MAX(id), 0) + 1, false) FROM usuarios`);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mensagens_midia (
+        id               SERIAL PRIMARY KEY,
+        mimetype         VARCHAR(100) NOT NULL,
+        conteudo_base64  TEXT NOT NULL,
+        data_criacao     TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
     logger.info('Tabelas de auditoria e refresh tokens verificadas.');
   } catch (e) {
     logger.error('Erro ao criar tabelas extras', { error: e.message });
@@ -352,11 +361,16 @@ app.post('/api/webhook/receber', async (req, res) => {
   try {
     const body = req.body;
     let telefoneRaw = '', texto = '', fromMe = false;
+    let midiaMimetype = null, midiaBase64 = null;
 
     if (body.event === 'message' && body.payload) {
       telefoneRaw = body.payload.from;
-      texto = body.payload.body;
+      texto = body.payload.body || '';
       fromMe = body.payload.fromMe;
+      if (body.payload.hasMedia && body.payload.media?.data) {
+        midiaMimetype = body.payload.media.mimetype || 'application/octet-stream';
+        midiaBase64 = body.payload.media.data;
+      }
     } else if (body.data?.message) {
       telefoneRaw = body.data.key?.remoteJid;
       texto = body.data.message?.conversation || body.data.message?.extendedTextMessage?.text || '';
@@ -366,7 +380,7 @@ app.post('/api/webhook/receber', async (req, res) => {
       texto = body.texto;
     }
 
-    if (!telefoneRaw || fromMe || !texto) return res.json({ status: 'Ignorado' });
+    if (!telefoneRaw || fromMe || (!texto && !midiaBase64)) return res.json({ status: 'Ignorado' });
 
     // Extrai apenas os dígitos iniciais — ignora sufixos como -v23-UUID ou @s.whatsapp.net
     const telefoneLimpo = telefoneRaw.match(/^\d+/)?.[0] || '';
@@ -377,7 +391,15 @@ app.post('/api/webhook/receber', async (req, res) => {
 
     if (rows.length > 0) {
       if (rows[0].status_robo === 'Humano' || rows[0].status_robo === 'Bloqueado') {
-        const msgData = { type: 'human', content: texto, additional_kwargs: {} };
+        let midia_id = null;
+        if (midiaBase64 && midiaMimetype) {
+          const midiaRes = await pool.query(
+            'INSERT INTO mensagens_midia (mimetype, conteudo_base64) VALUES ($1, $2) RETURNING id',
+            [midiaMimetype, midiaBase64]
+          );
+          midia_id = midiaRes.rows[0].id;
+        }
+        const msgData = { type: 'human', content: texto || '', additional_kwargs: midia_id ? { midia_id } : {} };
         await pool.query(
           'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
           [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
@@ -1168,14 +1190,28 @@ app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
        LIMIT 200`,
       [`${telefoneLimpo}%`]
     );
+
+    // Batch-fetch mídia recebida de pacientes (armazenada em mensagens_midia)
+    const midiaIds = rows.map(r => r.message?.additional_kwargs?.midia_id).filter(Boolean);
+    let midiaMap = {};
+    if (midiaIds.length > 0) {
+      const midiaRows = await pool.query(
+        'SELECT id, mimetype, conteudo_base64 FROM mensagens_midia WHERE id = ANY($1)',
+        [midiaIds]
+      );
+      midiaRows.rows.forEach(m => { midiaMap[m.id] = m; });
+    }
+
     const formatado = rows.map(r => {
       const msg = r.message;
+      const midiaId = msg.additional_kwargs?.midia_id;
+      const midia = midiaId ? midiaMap[midiaId] : null;
       return {
         texto: msg.content || msg.data?.content || msg.text || '',
         origem: (msg.type === 'human' || msg.sender === 'human') ? 'paciente' : 'ia_ou_recepcao',
         data: r.created_at,
-        mediaBase64: msg.additional_kwargs?.mediaBase64 || null,
-        mediaMimetype: msg.additional_kwargs?.mediaMimetype || null,
+        mediaBase64: msg.additional_kwargs?.mediaBase64 || midia?.conteudo_base64 || null,
+        mediaMimetype: msg.additional_kwargs?.mediaMimetype || midia?.mimetype || null,
       };
     });
     res.json(formatado);
