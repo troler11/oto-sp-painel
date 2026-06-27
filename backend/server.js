@@ -1172,7 +1172,9 @@ app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
       return {
         texto: msg.content || msg.data?.content || msg.text || '',
         origem: (msg.type === 'human' || msg.sender === 'human') ? 'paciente' : 'ia_ou_recepcao',
-        data: r.created_at
+        data: r.created_at,
+        mediaBase64: msg.additional_kwargs?.mediaBase64 || null,
+        mediaMimetype: msg.additional_kwargs?.mediaMimetype || null,
       };
     });
     res.json(formatado);
@@ -1212,7 +1214,7 @@ app.post('/api/chat/enviar-midia', verificarToken, upload.single('arquivo'), asy
 
   try {
     await enviarWhatsAppMidia(telefoneLimpo, base64, mimetype, filename);
-    const msgData = { type: 'ai', content: `📎 ${filename}`, additional_kwargs: { sender: req.user.nome } };
+    const msgData = { type: 'ai', content: `📎 ${filename}`, additional_kwargs: { sender: req.user.nome, mediaBase64: base64, mediaMimetype: mimetype } };
     await pool.query(
       'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]

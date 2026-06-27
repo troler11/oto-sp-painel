@@ -305,7 +305,12 @@ export default function App() {
       form.append('telefone', pacienteAtivoChat.telefone);
       const res = await fetch(`${API_URL}/chat/enviar-midia`, { method: 'POST', credentials: 'include', body: form });
       if (res.ok) {
-        setMensagens(prev => [...prev, { texto: `📎 ${file.name}`, origem: 'ia_ou_recepcao', data: new Date().toISOString() }]);
+        const reader = new FileReader();
+        reader.onload = () => {
+          const b64 = (reader.result as string).split(',')[1];
+          setMensagens(prev => [...prev, { texto: `📎 ${file.name}`, origem: 'ia_ou_recepcao', data: new Date().toISOString(), mediaBase64: b64, mediaMimetype: file.type }]);
+        };
+        reader.readAsDataURL(file);
       } else {
         adicionarNotificacao('Erro ao enviar arquivo.', 'erro');
       }

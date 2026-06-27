@@ -74,7 +74,13 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           return (
           <div key={idx} className={`flex ${msg.origem === 'sistema' ? 'justify-center' : msg.origem === 'paciente' ? 'justify-start' : 'justify-end'}`}>
             <div className={`max-w-[85%] text-[13px] shadow-sm ${msg.origem === 'sistema' ? 'bg-orange-100 text-orange-900 rounded-xl px-4 py-2 text-xs font-bold border border-orange-200' : msg.origem === 'paciente' ? 'bg-white text-slate-800 rounded-2xl rounded-tl-md px-4 py-3' : 'bg-[#dcf8c6] text-slate-800 rounded-2xl rounded-tr-md px-4 py-3'}`}>
-              <p className="whitespace-pre-wrap leading-relaxed font-medium">{textoFinal}</p>
+              {msg.mediaBase64 && msg.mediaMimetype?.startsWith('image/') ? (
+                <img src={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`} alt={textoFinal} className="max-w-[240px] rounded-xl mb-1 cursor-pointer" onClick={() => window.open(`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`)} />
+              ) : msg.mediaBase64 ? (
+                <a href={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`} download={textoFinal.replace('📎 ', '')} className="flex items-center gap-2 text-[#005088] font-bold underline">{textoFinal}</a>
+              ) : (
+                <p className="whitespace-pre-wrap leading-relaxed font-medium">{textoFinal}</p>
+              )}
               {msg.origem !== 'sistema' && (
                 <span className="text-[10px] text-slate-400/80 block mt-1.5 text-right font-bold">
                   {new Date(msg.data).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
