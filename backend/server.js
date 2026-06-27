@@ -904,6 +904,75 @@ app.get('/api/leads', verificarToken, async (req, res) => {
   }
 });
 
+app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) => {
+  if (!ITSAUDE_LOGIN || !ITSAUDE_SENHA) return res.json({ classificacao: null });
+
+  const cacheKey = `itsaude-classif:${req.params.id}`;
+  const cached = getCache(cacheKey);
+  if (cached !== undefined) return res.json(cached);
+
+  try {
+    const leadRes = await pool.query('SELECT telefone FROM contatos_whatsapp WHERE id = $1', [req.params.id]);
+    if (leadRes.rowCount === 0) return res.status(404).json({ erro: 'Lead não encontrado.' });
+
+    const tel = leadRes.rows[0].telefone;
+    const telLocal = tel.startsWith('55') ? tel.slice(2) : tel;
+
+    let token = _itsaudeTokenExpira > Date.now() ? _itsaudeToken : await _loginItsaude();
+
+    const buscarPaciente = (t) => fetch(
+      `https://api.tisaude.com/api/patients?cellphone=${encodeURIComponent(telLocal)}`,
+      { headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8_000) }
+    );
+    let pResp = await buscarPaciente(token);
+    if (pResp.status === 401) { token = await _loginItsaude(); pResp = await buscarPaciente(token); }
+
+    if (!pResp.ok) {
+      const r = { classificacao: 'novo_lead' };
+      setCache(cacheKey, r, 30 * 60_000);
+      return res.json(r);
+    }
+
+    const pData = await pResp.json();
+    const paciente = Array.isArray(pData) ? pData[0] : (pData.data ? pData.data[0] : (pData.id ? pData : null));
+
+    if (!paciente) {
+      const r = { classificacao: 'novo_lead' };
+      setCache(cacheKey, r, 30 * 60_000);
+      return res.json(r);
+    }
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    const tresAnosAtras = new Date(Date.now() - 3 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const tResp = await fetch(
+      `https://api.tisaude.com/api/patients/${paciente.id}/timeline?startDate=${tresAnosAtras}&endDate=${hoje}`,
+      { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8_000) }
+    );
+
+    let totalConsultas = 0;
+    if (tResp.ok) {
+      const tData = await tResp.json();
+      for (const dia of (tData.data || [])) {
+        for (const ev of (dia.data || [])) {
+          if (ev.type !== 'appointment') continue;
+          if ((ev.status?.name || '').toLowerCase().includes('desmarcado')) continue;
+          totalConsultas++;
+        }
+      }
+    }
+
+    const resultado = totalConsultas > 0
+      ? { classificacao: 'recorrente', nome_itsaude: paciente.name, total_consultas: totalConsultas }
+      : { classificacao: 'novo_paciente', nome_itsaude: paciente.name };
+
+    setCache(cacheKey, resultado, 30 * 60_000);
+    res.json(resultado);
+  } catch (err) {
+    logger.error('Erro ao classificar lead no iTSaúde', { error: err.message });
+    res.json({ classificacao: null });
+  }
+});
+
 // ============================================================
 // MODELOS DE MENSAGEM (com cache)
 // ============================================================

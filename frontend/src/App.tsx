@@ -18,6 +18,23 @@ import { tempoAtras, getAvatarCor } from './utils/helpers';
 import { useConfirm } from './hooks/useConfirm';
 import { useToast } from './hooks/useToast';
 import { useProfilePic } from './hooks/useProfilePic';
+import { useClassificacaoItsaude } from './hooks/useClassificacaoItsaude';
+
+function LeadClassificacaoBadge({ leadId }: { leadId: number }) {
+  const { classificacao, total_consultas } = useClassificacaoItsaude(leadId);
+  if (!classificacao) return null;
+  if (classificacao === 'novo_lead') return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-slate-100 text-slate-500 border border-slate-200">Novo Lead</span>
+  );
+  if (classificacao === 'novo_paciente') return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-blue-50 text-blue-600 border border-blue-200">Novo Paciente</span>
+  );
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
+      Recorrente{total_consultas ? ` · ${total_consultas}x` : ''}
+    </span>
+  );
+}
 
 function ProfileAvatar({ telefone, nome, size = 'w-10 h-10' }: { telefone: string; nome: string; size?: string }) {
   const foto = useProfilePic(telefone);
@@ -703,6 +720,7 @@ export default function App() {
                 {(lead.nome_atendimento || lead.nome_titular) && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
                 {!isTriage && lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{tempoAtras(lead.ultima_mensagem)}</p>
+                <div className="mt-1"><LeadClassificacaoBadge leadId={lead.id} /></div>
               </div>
             </div>
             {isTriage && <span className={`px-2 py-1 rounded-lg text-[9px] font-extrabold uppercase tracking-wider ${lead.status_robo === 'Robô' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}`}>{lead.status_robo === 'Robô' ? '🤖 Bot' : '👤 Pausado'}</span>}
