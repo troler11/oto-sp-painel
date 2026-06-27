@@ -16,9 +16,9 @@ tags: [frontend, funções, referência]
 ### Dados
 | Função | Descrição |
 |---|---|
-| `buscarDados()` | GET `/api/agendamentos` + `/api/leads` em paralelo. Detecta novos pacientes e dispara toast. Atualiza `agendamentos` e `leads`. |
+| `buscarDados()` | GET `/api/agendamentos` + `/api/leads` + `/api/contatos` em paralelo. Detecta novos pacientes e dispara toast. |
 | `buscarModelos()` | GET `/api/modelos` → atualiza `modelos` no estado |
-| `fetchSeguro(url, options)` | Wrapper de `fetch` que sempre inclui `credentials: 'include'` e `Content-Type: application/json` |
+| `fetchSeguro(url, options)` | Wrapper de `fetch` que sempre inclui `credentials: 'include'` e `Content-Type: application/json`. **Não usar para FormData** — vai sobrescrever o boundary. |
 
 ### Atendimentos / Kanban
 | Função | Descrição |
@@ -42,23 +42,38 @@ tags: [frontend, funções, referência]
 |---|---|
 | `carregarChat(paciente, isLead)` | GET `/api/chat/:telefone` → abre painel lateral com histórico |
 | `enviarMensagemChat(e)` | POST `/api/chat/enviar` → adiciona mensagem localmente |
+| `enviarMidiaChat(file)` | FormData → POST `/api/chat/enviar-midia` (usa `fetch` raw, não `fetchSeguro`). Optimistic: adiciona mensagem com base64 lido via FileReader antes da resposta. |
 | `interromperRobo(telefone)` | Confirm → PUT `/api/chat/:tel/interromper-robo` → status `Humano` |
-| `exportarLeadsCSV()` | Gera CSV UTF-8 BOM com colunas: Nome, Telefone, CPF, Status Bot, Última Mensagem, Data Cadastro. Botão visível apenas no filtro LEADS. |
+| `exportarLeadsCSV()` | Gera CSV UTF-8 BOM. Botão visível apenas no filtro LEADS. |
 
 **Atualização em tempo real do chat:**
 - Socket.io: handler `mensagem:nova` usa `pacienteAtivoChatRef.current` (ref, não closure) para comparar telefone e evitar o bug de closure estale no `useEffect([sessao])`
 - Polling de fallback: quando `chatAberto`, faz GET `/api/chat/:tel` a cada 5s e atualiza se o número de mensagens mudou
 
-### Leads
+### Leads e Triagem
 | Função | Descrição |
 |---|---|
 | `descartarLead(id)` | Confirm perigo → DELETE `/api/leads/:id` |
-| `converterParaPendente(lead)` | Confirm → POST `/api/leads/:id/converter` → cria ficha PENDENTE |
+| `converterParaPendente(lead)` | Confirm → POST `/api/leads/:id/converter` → cria ficha PENDENTE + status_robo='Humano' |
+| `renomearLead(id, nome)` | PATCH `/api/leads/:id/nome` — inline no card (lápis no hover) |
+| `renomearAgendamento(id, nome)` | PATCH `/api/agendamentos/:id/nome` — inline no PatientCard |
 
 **Filtros de Triagem:**
-- `TRIAGEM` mostra apenas leads com `sessao_intencao !== 'concluido'`
-- Contagem no menu lateral também aplica o mesmo filtro
-- Leads com ficha ativa (PENDENTE/EM ATENDIMENTO/AGENDADO/FINALIZADO com data_consulta) não aparecem
+- `TRIAGEM` mostra leads com `sessao_intencao !== 'concluido'`
+- Leads com PENDENTE/EM ATENDIMENTO/AGENDADO nunca aparecem; FINALIZADO reaparece se nova mensagem
+
+### Contatos
+| Função | Descrição |
+|---|---|
+| `bloquearContato(id, bloquear)` | PATCH `/api/contatos/:id/bloquear` → toggle Bloqueado ↔ Robô |
+| `adicionarContato()` | POST `/api/contatos` → cria/upsert por telefone; form inline |
+| `salvarEdicaoContato()` | PATCH `/api/contatos/:id` → edita nome e telefone |
+
+**Estado local:**
+- `contatos: Contato[]` — todos os contatos, carregados em `buscarDados()`
+- `searchContatos` — filtro por nome ou telefone em tempo real
+- `novoContatoForm` — controla form de adição inline
+- `editandoContato` — controla linha em edição inline
 
 ### Usuários (admin)
 | Função | Descrição |
@@ -137,7 +152,7 @@ toast('Mensagem', 'sucesso');  // tipos: 'sucesso' | 'erro' | 'info' | 'aviso'
 | `Header` | `components/Header.tsx` | Barra superior, busca, filtro de datas, painel de notificações |
 | `PatientCard` | `components/PatientCard.tsx` | Card do kanban com timer ao vivo, avatar colorido, ações por status. CANCELADO mostra "Consulta Cancelada" (vermelho, com data_consulta) ou "Ticket Descartado" (cinza, sem data_consulta) |
 | `Dashboard` | `components/Dashboard.tsx` | Relatórios, KPIs, gráficos. Cancelamentos separados em "Consultas Canceladas" e "Tickets Descartados" |
-| `ChatPanel` | `components/ChatPanel.tsx` | Painel lateral de chat WhatsApp. Oculta mensagens com payload N8N (`$$$JSON`) e mensagens que são JSON puro |
+| `ChatPanel` | `components/ChatPanel.tsx` | Painel lateral de chat WhatsApp. Filtra blocos N8N, renderiza imagens inline e docs como link de download. Botão Paperclip para enviar mídia. |
 | `PatientTimeline` | `components/PatientTimeline.tsx` | Modal com histórico cronológico de eventos do paciente |
 | `CardSkeleton` | `components/CardSkeleton.tsx` | Skeleton loading com animação shimmer |
 | `ConfirmModal` | `components/ConfirmModal.tsx` | Modal de confirmação com 3 tipos: perigo/aviso/info |
@@ -153,10 +168,25 @@ toast('Mensagem', 'sucesso');  // tipos: 'sucesso' | 'erro' | 'info' | 'aviso'
 
 ## ChatPanel — Filtro de mensagens N8N
 
-Mensagens geradas pelo N8N são filtradas antes de exibir:
-1. Texto com `$$$` → exibe só a parte antes do separador (ex: `😊$$${"t":...}` → `😊`)
-2. Texto vazio após remover `$$$` → mensagem ocultada
-3. Texto que é JSON puro (começa com `{` e é válido) → mensagem ocultada
+Operações aplicadas **antes** do split em `$$$` (ordem importa):
+1. `[Mensagem original: VALUE]` → exibe apenas VALUE
+2. `[* ACEITO: VALUE]` → exibe apenas VALUE
+3. `[TAG]...[/TAG]` → remove bloco inteiro
+4. `[TAG: value]` → remove
+5. `[TAG]` standalone → remove
+6. Split em `$$$` → exibe só antes
+7. Texto vazio → oculta
+8. JSON puro (`{...}`) → oculta
+
+## ChatPanel — Renderização de mídia
+
+| Condição | Renderização |
+|---|---|
+| `mediaBase64 + mimetype.startsWith('image/')` | `<img>` inline, clique abre em nova aba |
+| `mediaBase64` (outro tipo) | Link de download com nome do arquivo |
+| Sem mídia | Texto normal |
+
+Mídia de pacientes vem de `mensagens_midia` via `midia_id`. Mídia enviada pelo staff vem de `additional_kwargs.mediaBase64`.
 
 ---
 

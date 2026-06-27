@@ -48,21 +48,33 @@ Todas as rotas protegidas exigem cookie `token` (httpOnly) — enviado automatic
 | GET | `/api/agendamentos` | Sim | Lista agendamentos (com filtros) |
 | PUT | `/api/status` | Sim | Atualiza status de um agendamento |
 | PUT | `/api/agendar` | Sim | Agenda consulta (data, hora, médico) |
+| PATCH | `/api/agendamentos/:id/nome` | Sim | Edita nome_paciente |
 
 ## Leads
 
 | Método | Rota | Auth | Descrição |
 |---|---|---|---|
-| GET | `/api/leads` | Sim | Lista leads do WhatsApp |
+| GET | `/api/leads` | Sim | Lista leads (exclui PENDENTE/EM ATENDIMENTO/AGENDADO e Bloqueados) |
+| PATCH | `/api/leads/:id/nome` | Sim | Edita nome_titular do contato |
 | DELETE | `/api/leads/:id` | Admin | Remove lead |
-| POST | `/api/leads/:id/converter` | Sim | Converte lead em agendamento |
+| POST | `/api/leads/:id/converter` | Sim | Converte lead em agendamento PENDENTE (seta status_robo='Humano') |
+
+## Contatos
+
+| Método | Rota | Auth | Descrição |
+|---|---|---|---|
+| GET | `/api/contatos` | Sim | Lista todos os contatos (max 500) |
+| POST | `/api/contatos` | Sim | Cria/upsert contato por telefone |
+| PATCH | `/api/contatos/:id` | Sim | Edita nome e/ou telefone |
+| PATCH | `/api/contatos/:id/bloquear` | Sim | Toggle Bloqueado ↔ Robô |
 
 ## Chat / WhatsApp
 
 | Método | Rota | Auth | Descrição |
 |---|---|---|---|
-| GET | `/api/chat/:telefone` | Sim | Histórico de mensagens |
-| POST | `/api/chat/enviar` | Sim | Envia mensagem via WAHA |
+| GET | `/api/chat/:telefone` | Sim | Histórico de mensagens (inclui mediaBase64/mediaMimetype) |
+| POST | `/api/chat/enviar` | Sim | Envia mensagem de texto via WAHA |
+| POST | `/api/chat/enviar-midia` | Sim | Envia imagem/PDF via WAHA (multipart, campo `arquivo`) |
 | PUT | `/api/chat/:telefone/interromper-robo` | Sim | Passa para atendimento humano |
 
 ## Modelos de Mensagem

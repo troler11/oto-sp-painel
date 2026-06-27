@@ -51,20 +51,19 @@ tags: [backend, funções, referência]
 ## Webhook WhatsApp
 
 ### `POST /api/webhook/receber`
-- Valida header `x-webhook-secret` com `timingSafeEqual` (evita timing attacks) → `401` se inválido ou ausente
+- Valida header `x-webhook-secret` com `timingSafeEqual` → `401` se inválido ou ausente
 - Suporta 3 formatos de payload:
   - `body.event === 'message' + body.payload` → formato WAHA padrão
   - `body.data.message` → formato alternativo
   - `body.telefone + body.texto` → formato manual/N8N direto
-- Extrai telefone com `telefoneRaw.match(/^\d+/)?.[0]` — captura só os dígitos iniciais, ignorando sufixos como `-v23-UUID` ou `@s.whatsapp.net`. **Nunca usar `replace(/\D/g,'')` aqui** — inclui dígitos do UUID.
-- Ignora mensagens com `fromMe = true` ou texto vazio → retorna `{ status: 'Ignorado' }` com HTTP 200
-- Se contato **não encontrado** ou `status_robo = 'Robô'` → retorna `{ status: 'Ignorado' }` com HTTP 200 (não salva nada)
-- Se contato em modo `Humano`:
-  - Salva em `chat_messages` com `session_id = '{telefone}@s.whatsapp.net'`
-  - Atualiza `contatos_whatsapp.ultima_mensagem = NOW()`
-  - Emite `mensagem:nova` via Socket.io para o painel
+- Extrai telefone com `telefoneRaw.match(/^\d+/)?.[0]` — **nunca usar `replace(/\D/g,'')` aqui** (inclui dígitos do UUID)
+- Ignora: `fromMe = true` ou sem texto E sem mídia → `{ status: 'Ignorado' }` com HTTP 200
+- Se contato **não encontrado** ou `status_robo = 'Robô'` → `{ status: 'Ignorado' }` (não salva nada); modo Robô também reseta `sessao_intencao` de `'concluido'` para `'triagem'` quando mensagem nova chega
+- Se contato em modo `Humano` **ou** `Bloqueado`:
+  - Se `payload.hasMedia && payload.media.data`: salva base64 em `mensagens_midia`, guarda `midia_id` em `additional_kwargs`
+  - Salva em `chat_messages`; atualiza `ultima_mensagem`; emite `mensagem:nova`
 
-**Integração N8N:** o nó HTTP Request deve incluir o header `x-webhook-secret` com o valor da variável de ambiente `WEBHOOK_SECRET`. Sem esse header o N8N recebe 401. O retorno HTTP 200 com `{ status: 'Ignorado' }` **não significa erro** — apenas que a mensagem não era para o painel (contato em modo Robô).
+**Integração N8N:** incluir `x-webhook-secret` no header. HTTP 200 `{ status: 'Ignorado' }` não é erro.
 
 ---
 
@@ -143,11 +142,18 @@ coleta_medico = '', nome_atendimento = '', coleta_id_tisaude = ''
 
 ### `GET /api/chat/:telefone`
 - Busca mensagens em `chat_messages` com `session_id LIKE '55119..%'`
-- O `LIKE` com prefixo do número cobre todos os formatos históricos: bare, `@s.whatsapp.net`, `-v23-UUID` e variantes com dígitos extras
+- Para cada mensagem com `additional_kwargs.midia_id` (ou `data.additional_kwargs.midia_id`), faz batch-fetch em `mensagens_midia` e inclui `mediaBase64` + `mediaMimetype` na resposta
+- O `LIKE` cobre todos os formatos históricos: bare, `@s.whatsapp.net`, `-v23-UUID`
 
 ### `POST /api/chat/enviar`
-- Envia mensagem via WAHA API
-- Salva no banco para histórico com `session_id = '{telefone}@s.whatsapp.net'`
+- Envia mensagem de texto via WAHA API
+- Salva no banco com `type: 'ai'`, `session_id = '{tel}@s.whatsapp.net'`
+
+### `POST /api/chat/enviar-midia`
+- Recebe arquivo via multipart (campo `arquivo`, multer memoryStorage, 10MB max)
+- Encoding do nome: `Buffer.from(originalname, 'latin1').toString('utf8')`
+- `image/*` → WAHA `/api/sendImage`; outros → `/api/sendFile` com `file.filename` (não `name`)
+- Salva em `chat_messages` com `additional_kwargs: { mediaBase64, mediaMimetype, sender }`
 
 ### `PUT /api/chat/:telefone/interromper-robo`
 - Atualiza `status_robo = 'Humano'` em `contatos_whatsapp`
@@ -158,17 +164,41 @@ coleta_medico = '', nome_atendimento = '', coleta_id_tisaude = ''
 ## Leads
 
 ### `GET /api/leads`
-- Lista contatos que **não** têm agendamento ativo
-- Excluídos: `PENDENTE`, `EM ATENDIMENTO`, `AGENDADO`, ou `FINALIZADO com data_consulta`
-- Incluídos: sem agendamento, `CANCELADO`, `FINALIZADO sem data_consulta`
+- Lista contatos sem agendamento ativo
+- **Exclusão absoluta:** `PENDENTE`, `EM ATENDIMENTO`, `AGENDADO`, `Bloqueado`
+- **Exclusão condicional (FINALIZADO):** só aparece se `ultima_mensagem > MAX(data_atualizacao)` das fichas finalizadas (reentrada por nova mensagem)
 - Retorna `sessao_intencao` para filtro de Triagem no frontend
+
+### `PATCH /api/leads/:id/nome`
+- Atualiza `nome_titular` em `contatos_whatsapp`
 
 ### `DELETE /api/leads/:id` (admin/gerente)
 - Remove contato permanentemente
 
 ### `POST /api/leads/:id/converter`
 - Cria agendamento `PENDENTE` a partir do lead
-- Nome do paciente: `nome_atendimento || nome_titular || telefone` (prioriza o coletado pelo bot)
+- Nome: `nome_atendimento || nome_titular || telefone`
+- Seta `status_robo = 'Humano'` (bot para, atendente usa chat)
+
+---
+
+## Contatos
+
+### `GET /api/contatos`
+- Lista todos os contatos (sem filtro de ficha), max 500, `ORDER BY ultima_mensagem DESC`
+
+### `POST /api/contatos`
+- `UPSERT` por `telefone`: se já existe, atualiza `nome_titular`
+- Retorna o contato completo
+
+### `PATCH /api/contatos/:id`
+- Atualiza `nome_titular` e/ou `telefone`
+
+### `PATCH /api/contatos/:id/bloquear`
+- `{ bloquear: true }` → `status_robo = 'Bloqueado'`
+- `{ bloquear: false }` → `status_robo = 'Robô'`
+
+**status_robo = 'Bloqueado':** mensagens do paciente chegam ao chat do staff (salvas em `chat_messages`), bot N8N não responde (N8N deve checar `status_robo` antes de agir). Contato não aparece em Leads nem Triagem.
 
 ---
 
