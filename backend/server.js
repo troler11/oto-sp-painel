@@ -1430,17 +1430,20 @@ app.get('/api/contatos/:telefone/foto', verificarToken, async (req, res) => {
   if (cached === 'NONE') return res.status(404).end();
   if (cached) return res.json({ url: cached });
   try {
-    const resp = await fetch(
-      `${WAHA_BASE_URL}/api/contacts/profile-picture?contactId=${tel}@s.whatsapp.net&session=${WAHA_SESSION}`,
-      { headers: wahaHeaders(), signal: AbortSignal.timeout(5_000) }
-    );
+    // WAHA aceita @s.whatsapp.net ou @c.us dependendo da versão
+    const contactId = `${tel}@s.whatsapp.net`;
+    const wahaUrl = `${WAHA_BASE_URL}/api/contacts/profile-picture?contactId=${encodeURIComponent(contactId)}&session=${WAHA_SESSION}`;
+    const resp = await fetch(wahaUrl, { headers: wahaHeaders(), signal: AbortSignal.timeout(5_000) });
+    const body = await resp.text();
+    logger.info('WAHA foto perfil', { tel, status: resp.status, body: body.substring(0, 200) });
     if (!resp.ok) { setCache(cacheKey, 'NONE', 60 * 60 * 1000); return res.status(404).end(); }
-    const data = await resp.json();
-    const url = data.eurl || data.profilePictureUrl || null;
+    const data = JSON.parse(body);
+    const url = data.eurl || data.profilePictureUrl || data.url || null;
     if (!url) { setCache(cacheKey, 'NONE', 60 * 60 * 1000); return res.status(404).end(); }
     setCache(cacheKey, url, 60 * 60 * 1000);
     res.json({ url });
-  } catch {
+  } catch (e) {
+    logger.error('Erro ao buscar foto WAHA', { error: e.message });
     setCache(cacheKey, 'NONE', 60 * 60 * 1000);
     res.status(404).end();
   }
