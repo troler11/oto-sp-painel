@@ -90,6 +90,7 @@ export default function App() {
   const [chatAberto, setChatAberto] = useState(false);
   const [pacienteAtivoChat, setPacienteAtivoChat] = useState<PacienteChat | null>(null);
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
+  const ultimaMsgDataRef = useRef<string | null>(null);
   const [novaMensagem, setNovaMensagem] = useState('');
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
   const [enviandoMidia, setEnviandoMidia] = useState(false);
@@ -137,16 +138,25 @@ export default function App() {
   useEffect(() => { document.title = 'OtoFlow CRM | Gestão de Atendimentos'; }, []);
   useEffect(() => { pacienteAtivoChatRef.current = pacienteAtivoChat; }, [pacienteAtivoChat]);
 
-  // Polling de fallback: quando o chat está aberto, busca mensagens a cada 5s
+  // Mantém ref com o timestamp da última mensagem (evita closure stale no poll)
+  useEffect(() => {
+    ultimaMsgDataRef.current = mensagens.length > 0 ? mensagens[mensagens.length - 1].data : null;
+  }, [mensagens]);
+
+  // Polling de fallback: busca apenas mensagens novas (desde a última conhecida)
   useEffect(() => {
     if (!chatAberto || !pacienteAtivoChat?.telefone) return;
     const tel = pacienteAtivoChat.telefone;
     const poll = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/chat/${tel}`, { credentials: 'include' });
+        const desde = ultimaMsgDataRef.current;
+        const url = desde
+          ? `${API_URL}/chat/${tel}?desde=${encodeURIComponent(desde)}`
+          : `${API_URL}/chat/${tel}`;
+        const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) return;
         const novas: MensagemChat[] = await res.json();
-        setMensagens(prev => novas.length !== prev.length ? novas : prev);
+        if (novas.length > 0) setMensagens(prev => [...prev, ...novas]);
       } catch { /* silencioso */ }
     }, 5000);
     return () => clearInterval(poll);

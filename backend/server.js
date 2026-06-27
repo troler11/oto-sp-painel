@@ -204,6 +204,7 @@ const criarIndices = async () => {
     `CREATE INDEX IF NOT EXISTS idx_contatos_telefone       ON contatos_whatsapp (telefone)`,
     `CREATE INDEX IF NOT EXISTS idx_contatos_status_robo    ON contatos_whatsapp (status_robo)`,
     `CREATE INDEX IF NOT EXISTS idx_chat_session            ON chat_messages (session_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_chat_session_pattern    ON chat_messages (session_id text_pattern_ops)`,
     `CREATE INDEX IF NOT EXISTS idx_chat_created            ON chat_messages (created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_auditoria_usuario       ON auditoria_log (usuario_id)`,
     `CREATE INDEX IF NOT EXISTS idx_auditoria_criacao       ON auditoria_log (criado_em DESC)`,
@@ -1193,15 +1194,19 @@ app.put('/api/agendar', verificarToken, async (req, res) => {
 // ============================================================
 app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
   const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
+  const desde = req.query.desde as string | undefined;
   try {
     // LIKE '5511997255184%' cobre todos os formatos: bare, @s.whatsapp.net,
     // -v23-UUID e variantes com dígitos extras gravadas por versões anteriores
+    const params: (string | Date)[] = [`${telefoneLimpo}%`];
+    let filtroDesde = '';
+    if (desde) { filtroDesde = ` AND created_at > $2`; params.push(new Date(desde)); }
     const { rows } = await pool.query(
       `SELECT message, created_at FROM chat_messages
-       WHERE session_id LIKE $1
+       WHERE session_id LIKE $1${filtroDesde}
        ORDER BY created_at ASC
        LIMIT 200`,
-      [`${telefoneLimpo}%`]
+      params
     );
 
     // Batch-fetch mídia recebida de pacientes (armazenada em mensagens_midia)
@@ -1268,7 +1273,11 @@ app.post('/api/chat/enviar-midia', verificarToken, upload.single('arquivo'), asy
 
   try {
     await enviarWhatsAppMidia(telefoneLimpo, base64, mimetype, filename);
-    const msgData = { type: 'ai', content: `📎 ${filename}`, additional_kwargs: { sender: req.user.nome, mediaBase64: base64, mediaMimetype: mimetype } };
+    const { rows: [midiaRow] } = await pool.query(
+      'INSERT INTO mensagens_midia (mimetype, conteudo_base64) VALUES ($1, $2) RETURNING id',
+      [mimetype, base64]
+    );
+    const msgData = { type: 'ai', content: `📎 ${filename}`, additional_kwargs: { sender: req.user.nome, midia_id: midiaRow.id, mediaMimetype: mimetype } };
     await pool.query(
       'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
