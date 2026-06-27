@@ -103,10 +103,38 @@ Sem novo status no banco — apenas visual. Usado em `PatientCard`, `CancelModal
 Quando um agendamento muda para `FINALIZADO`, `CANCELADO` ou `AGENDADO`, o backend atualiza `contatos_whatsapp` com:
 `status_robo='Robô'`, `sessao_intencao='triagem'`, `sessao_rota=0`, `sessao_atualizada_em=NOW()` e zera todos os campos `coleta_*`, `nome_atendimento`, `coleta_id_tisaude`.
 
-### Triagem — filtro de sessao_intencao
-Leads com `sessao_intencao = 'concluido'` são excluídos da view Triagem e da contagem no menu lateral. A lógica vive no frontend (`leads.filter(l => l.sessao_intencao !== 'concluido')`). A API também exclui contatos com ficha ativa (PENDENTE/EM ATENDIMENTO/AGENDADO).
+### Triagem — critérios de exibição
+`GET /api/leads` retorna contatos que passam em **todos** estes critérios:
+1. Sem ticket `PENDENTE` ou `EM ATENDIMENTO` (exclusão absoluta — alguém está atendendo)
+2. `ultima_mensagem > MAX(COALESCE(data_atualizacao, data_criacao))` de qualquer ticket vinculado ao **mesmo telefone** (JOIN via `contatos_whatsapp`) — ou sem nenhum ticket
+3. `status_robo != 'Bloqueado'`
 
-**Reentrada:** contato com ficha FINALIZADA volta à Triagem se mandar nova mensagem após o fechamento (`ultima_mensagem > MAX(data_atualizacao)` das fichas finalizadas). Contatos AGENDADO nunca reaparecem — exclusão absoluta.
+AGENDADO e FINALIZADO são condicionais: o contato reaparece se mandou mensagem depois do último ticket ser atualizado. O JOIN usa telefone (não `contato_id`) para cobrir tickets de registros duplicados do mesmo número.
+
+Frontend filtra adicionalmente: `sessao_intencao !== 'concluido'` (bot encerrou o fluxo sem nova mensagem).
+
+**Reentrada via webhook:** quando contato com `sessao_intencao='concluido'` manda nova mensagem no modo Robô, o backend reseta `sessao_intencao` para `'triagem'`.
+
+### Recuperação de Leads — critérios de exibição
+Fonte: `GET /api/contatos` (todos os contatos, max 500) — **diferente** da Triagem.
+Filtros aplicados no frontend:
+1. `status_robo !== 'Bloqueado'`
+2. Classificação iTSaúde: só aparecem `novo_lead` e `novo_paciente` — `recorrente` é escondido
+3. Busca por texto (nome/telefone)
+
+State separado: Triagem usa `leads` (de `GET /api/leads`), Recuperação usa `contatos` (de `GET /api/contatos`).
+
+### Classificação iTSaúde — leads
+Rota `GET /api/leads/:id/classificar-itsaude` — busca contato por ID, remove prefixo 55, consulta iTSaúde:
+- Não encontrado → `novo_lead`
+- Encontrado, sem consultas → `novo_paciente`
+- Encontrado, com consultas → `recorrente` (+ `total_consultas` se página 1 tem dados)
+
+**Paginação:** timeline usa `page=1` + range 5 anos atrás até 2 anos no futuro. Se `next_page_url` não vazio → paciente tem mais páginas = `recorrente` (sem contagem). Conta apenas eventos `type === 'appointment'` excluindo `status.name` contendo "desmarcado".
+
+Cache backend: 30min por ID (`itsaude-classif:<id>`). **Checar com `!== null`** (getCache retorna null para ausente E expirado).
+
+Frontend: hook `useClassificacaoItsaude` em `frontend/src/hooks/useClassificacaoItsaude.ts` com cache em módulo Map. `prefetchClassificacoes(ids)` faz bulk paralelo ao entrar na aba Recuperação. `LeadClassificacaoBadge` em App.tsx exibe badge nos cards de ambas as abas.
 
 ### Aba Contatos
 Lista **todos** os contatos (sem filtro de ficha), max 500, ordenado por `ultima_mensagem DESC`.
@@ -121,6 +149,13 @@ Rotas:
 
 Frontend: busca em tempo real (nome/telefone), form inline de adição, edição inline por linha (lápis no hover).
 
+### Novo Ticket manual
+Botão "Novo Ticket" na barra de abas do kanban abre modal com campos telefone e nome. Rota `POST /api/agendamentos/manual`:
+- Adiciona prefixo `55` automaticamente se número tiver 10-11 dígitos
+- Faz upsert em `contatos_whatsapp` pelo telefone
+- Cria agendamento `PENDENTE` vinculado ao contato
+- Seta `status_robo = 'Humano'` para o bot não responder
+
 ### Converter lead → nome do paciente
 A rota `POST /api/leads/:id/converter` usa `nome_atendimento || nome_titular || telefone` como nome do paciente na ficha criada. `nome_atendimento` é o nome coletado pelo bot N8N durante o fluxo. Após criar a ficha, seta `status_robo = 'Humano'` (para o bot parar de responder e o atendente poder usar o chat).
 
@@ -131,12 +166,13 @@ Rotas `/api/waha/*` disponíveis para `admin` e `gerente`. O start sempre faz um
 Operações aplicadas **antes** do split em `$$$`:
 1. `[Mensagem original: VALUE]` → exibe apenas VALUE
 2. `[* ACEITO: VALUE]` → exibe apenas VALUE
-3. `[TAG]...[/TAG]` → remove o bloco inteiro
-4. `[TAG: value]` → remove
-5. `[TAG]` standalone → remove
-6. Após strip, split em `$$$` → exibe só a parte antes
-7. Se texto vazio após tudo → oculta mensagem
-8. Se texto é JSON puro (começa com `{` e é válido) → oculta mensagem
+3. `[INICIO COLETA: ...paciente escolheu "VALUE"...]` → exibe apenas VALUE
+4. `[TAG]...[/TAG]` → remove o bloco inteiro
+5. `[TAG: value]` → remove
+6. `[TAG]` standalone → remove
+7. Após strip, split em `$$$` → exibe só a parte antes
+8. Se texto vazio após tudo → oculta mensagem
+9. Se texto é JSON puro (começa com `{` e é válido) → oculta mensagem
 
 **Renderização de mídia no chat:**
 - `msg.mediaBase64 + mediaMimetype.startsWith('image/')` → `<img>` inline clicável (abre em nova aba)
