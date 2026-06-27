@@ -693,7 +693,7 @@ export default function App() {
       const isTriage = filtro === 'TRIAGEM';
       const lista = isTriage
         ? filtrosLeads.filter(l => l.sessao_intencao !== 'concluido')
-        : filtrosLeads.filter(l => classificacoesLeads[l.id] !== 'recorrente');
+        : filtrosLeads;
       return lista.length ? lista.map(lead => (
         <div key={lead.id} className={`bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all relative flex flex-col group`}>
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
@@ -883,7 +883,7 @@ export default function App() {
 
             {filtro === 'LEADS' && (
               <div className="flex justify-between items-center mb-5">
-                <p className="text-sm font-bold text-slate-500">{filtrosLeads.filter(l => classificacoesLeads[l.id] !== 'recorrente').length} leads encontrados</p>
+                <p className="text-sm font-bold text-slate-500">{filtrosLeads.length} leads encontrados</p>
                 <button onClick={exportarLeadsCSV} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm">
                   <Download size={15} /> Exportar Excel
                 </button>
