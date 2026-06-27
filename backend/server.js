@@ -1419,13 +1419,17 @@ async function enviarWhatsAppMidia(telefone, base64, mimetype, filename) {
   const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
   if (WAHA_API_KEY) headers['X-Api-Key'] = WAHA_API_KEY;
 
-  const resp = await fetch(`${WAHA_BASE_URL}/api/sendFile`, {
+  const isImagem = mimetype.startsWith('image/');
+  const endpoint = isImagem ? `${WAHA_BASE_URL}/api/sendImage` : `${WAHA_BASE_URL}/api/sendFile`;
+
+  const resp = await fetch(endpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify({
       session: WAHA_SESSION,
       chatId: `${telefone}@c.us`,
       file: { data: `data:${mimetype};base64,${base64}`, name: filename, mimetype },
+      caption: '',
     }),
     signal: AbortSignal.timeout(30_000),
   });
