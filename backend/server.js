@@ -1502,7 +1502,7 @@ async function enviarWhatsAppMidia(telefone, base64, mimetype, filename) {
     body: JSON.stringify({
       session: WAHA_SESSION,
       chatId: `${telefone}@c.us`,
-      file: { data: base64, name: filename, mimetype },
+      file: { data: base64, filename, mimetype },
       caption: '',
     }),
     signal: AbortSignal.timeout(30_000),
