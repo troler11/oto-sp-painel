@@ -376,7 +376,7 @@ app.post('/api/webhook/receber', async (req, res) => {
     );
 
     if (rows.length > 0) {
-      if (rows[0].status_robo === 'Humano') {
+      if (rows[0].status_robo === 'Humano' || rows[0].status_robo === 'Bloqueado') {
         const msgData = { type: 'human', content: texto, additional_kwargs: {} };
         await pool.query(
           'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
@@ -870,6 +870,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
             AND a.status_atendimento IN ('AGENDADO', 'FINALIZADO')
           )
         )
+        AND c.status_robo != 'Bloqueado'
       ORDER BY c.ultima_mensagem DESC
     `);
     res.json(rows);
@@ -1324,6 +1325,37 @@ app.post('/api/leads/:id/converter', verificarToken, async (req, res) => {
   } catch (err) {
     logger.error('Erro ao converter lead', { error: err.message });
     res.status(500).json({ erro: 'Erro ao converter lead.' });
+  }
+});
+
+// ============================================================
+// CONTATOS
+// ============================================================
+app.get('/api/contatos', verificarToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, telefone, nome_titular, nome_atendimento, cpf_titular,
+             status_robo, ultima_mensagem, data_cadastro, sessao_intencao
+      FROM contatos_whatsapp
+      ORDER BY ultima_mensagem DESC
+      LIMIT 500
+    `);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao buscar contatos.' });
+  }
+});
+
+app.patch('/api/contatos/:id/bloquear', verificarToken, async (req, res) => {
+  const { bloquear } = req.body;
+  try {
+    await pool.query(
+      'UPDATE contatos_whatsapp SET status_robo = $1 WHERE id = $2',
+      [bloquear ? 'Bloqueado' : 'Robô', req.params.id]
+    );
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao bloquear contato.' });
   }
 });
 

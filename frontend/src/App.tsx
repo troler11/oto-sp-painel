@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 import { AppContext } from './context/AppContext';
-import type { Sessao, Agendamento, Lead, Notificacao, ModeloMensagem, Usuario, MensagemChat, PacienteChat } from './types';
+import type { Sessao, Agendamento, Lead, Contato, Notificacao, ModeloMensagem, Usuario, MensagemChat, PacienteChat } from './types';
 import { tempoAtras, getAvatarCor } from './utils/helpers';
 import { useConfirm } from './hooks/useConfirm';
 import { useToast } from './hooks/useToast';
@@ -60,6 +60,7 @@ export default function App() {
   // ── Data ──────────────────────────────────────────────────────
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [contatos, setContatos] = useState<Contato[]>([]);
   const [filtro, setFiltro] = useState('TRIAGEM');
   const [editandoNomeLead, setEditandoNomeLead] = useState<{ id: number; valor: string } | null>(null);
   const [dataInicio, setDataInicio] = useState('');
@@ -221,7 +222,7 @@ export default function App() {
     if (!sessao) return;
     setCarregandoDados(true);
     try {
-      const [resA, resL] = await Promise.all([fetchSeguro(`${API_URL}/agendamentos`), fetchSeguro(`${API_URL}/leads`)]);
+      const [resA, resL, resC] = await Promise.all([fetchSeguro(`${API_URL}/agendamentos`), fetchSeguro(`${API_URL}/leads`), fetchSeguro(`${API_URL}/contatos`)]);
       if (resA.status === 401) { fazerLogout(); return; }
       if (resA.ok && resA.headers.get('content-type')?.includes('application/json')) {
         const data: Agendamento[] = await resA.json();
@@ -234,6 +235,7 @@ export default function App() {
         setAgendamentos(limpos);
       }
       if (resL.ok && resL.headers.get('content-type')?.includes('application/json')) setLeads(await resL.json());
+      if (resC.ok && resC.headers.get('content-type')?.includes('application/json')) setContatos(await resC.json());
     } catch (e: any) { setErroAcesso(e.message); }
     finally { setCarregandoDados(false); setPrimeiraCarregamento(false); }
   };
@@ -559,6 +561,12 @@ export default function App() {
     );
   }
 
+  // ── bloquearContato ───────────────────────────────────────────
+  const bloquearContato = async (id: number, bloquear: boolean) => {
+    const res = await fetchSeguro(`${API_URL}/contatos/${id}/bloquear`, { method: 'PATCH', body: JSON.stringify({ bloquear }) });
+    if (res.ok) setContatos(prev => prev.map(c => c.id === id ? { ...c, status_robo: bloquear ? 'Bloqueado' : 'Robô' } : c));
+  };
+
   // ── App autenticado ───────────────────────────────────────────
   const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO', 'CANCELADO'] as const;
   const filtrosLeads = aplicarFiltros(leads, true);
@@ -715,7 +723,7 @@ export default function App() {
           <Header filtro={filtro} searchTerm={searchTerm} setSearchTerm={setSearchTerm} dataInicio={dataInicio} setDataInicio={setDataInicio} dataFim={dataFim} setDataFim={setDataFim} carregandoDados={carregandoDados} buscarDados={buscarDados} notificacoes={notificacoes} setNotificacoes={setNotificacoes} painelNotifAberto={painelNotifAberto} setPainelNotifAberto={setPainelNotifAberto} />
 
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            {!['RELATORIOS', 'LEADS'].includes(filtro) && (
+            {!['RELATORIOS', 'LEADS', 'CONTATOS'].includes(filtro) && (
               <div className="flex gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm mb-6 overflow-x-auto scrollbar-hide">
                 {ABAS.map(aba => (
                   <button key={aba} onClick={() => setFiltro(aba)}
@@ -736,7 +744,40 @@ export default function App() {
               </div>
             )}
 
-            {filtro === 'RELATORIOS' ? (
+            {filtro === 'CONTATOS' ? (
+              <div>
+                <div className="flex justify-between items-center mb-5">
+                  <p className="text-sm font-bold text-slate-500">{contatos.length} contatos</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
+                  {contatos.length === 0 && <p className="p-8 text-center text-slate-400 font-medium">Nenhum contato encontrado.</p>}
+                  {contatos.map(c => {
+                    const nome = c.nome_titular || c.nome_atendimento || c.telefone;
+                    const bloqueado = c.status_robo === 'Bloqueado';
+                    return (
+                      <div key={c.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
+                        <div className={`w-10 h-10 ${getAvatarCor(nome)} text-white rounded-full flex items-center justify-center font-extrabold text-sm shrink-0`}>
+                          {nome.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-slate-800 text-sm truncate">{nome}</p>
+                          <p className="text-xs text-slate-400 font-medium">{c.telefone}</p>
+                        </div>
+                        <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 ${bloqueado ? 'bg-red-100 text-red-600' : c.status_robo === 'Humano' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {bloqueado ? 'Bloqueado' : c.status_robo === 'Humano' ? 'Humano' : 'Bot'}
+                        </span>
+                        <p className="text-[11px] text-slate-400 font-medium shrink-0 w-20 text-right">{tempoAtras(c.ultima_mensagem)}</p>
+                        <button
+                          onClick={() => bloquearContato(c.id, !bloqueado)}
+                          className={`shrink-0 text-xs font-bold px-3.5 py-2 rounded-xl transition-colors ${bloqueado ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-700' : 'bg-slate-100 hover:bg-red-100 text-slate-600 hover:text-red-600'}`}>
+                          {bloqueado ? 'Desbloquear' : 'Bloquear Robô'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : filtro === 'RELATORIOS' ? (
               <Dashboard agendamentos={agendamentos} leads={leads} />
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
