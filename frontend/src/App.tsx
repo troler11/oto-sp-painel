@@ -572,11 +572,10 @@ export default function App() {
       const termo = searchTerm.toLowerCase();
       const matchText = (ag.nome_paciente || ld.nome_titular || '').toLowerCase().includes(termo) ||
         (ag.cpf_paciente || ld.cpf_titular || '').replace(/\D/g, '').includes(termo.replace(/\D/g, ''));
+      if (isLead) return matchText;
       let matchData = true;
       if (dataInicio || dataFim) {
-        let dStr = '';
-        if (isLead) dStr = new Date(ld.ultima_mensagem).toISOString().split('T')[0];
-        else dStr = (['AGENDADO', 'FINALIZADO'].includes(ag.status_atendimento)) ? (ag.data_consulta ? ag.data_consulta.split('T')[0] : '') : new Date(ag.data_criacao).toISOString().split('T')[0];
+        let dStr = (['AGENDADO', 'FINALIZADO'].includes(ag.status_atendimento)) ? (ag.data_consulta ? ag.data_consulta.split('T')[0] : '') : new Date(ag.data_criacao).toISOString().split('T')[0];
         if (!dStr) matchData = false;
         else if (dataInicio && dataFim) matchData = dStr >= dataInicio && dStr <= dataFim;
         else if (dataInicio) matchData = dStr >= dataInicio;
