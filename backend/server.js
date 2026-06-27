@@ -1383,7 +1383,7 @@ async function enviarWhatsApp(telefone, texto) {
 }
 
 async function enviarWhatsAppMidia(telefone, base64, mimetype, filename) {
-  if (!WAHA_BASE_URL) return;
+  if (!WAHA_BASE_URL) throw new Error('WAHA_BASE_URL não configurado');
   const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
   if (WAHA_API_KEY) headers['X-Api-Key'] = WAHA_API_KEY;
 
@@ -1393,11 +1393,15 @@ async function enviarWhatsAppMidia(telefone, base64, mimetype, filename) {
     body: JSON.stringify({
       session: WAHA_SESSION,
       chatId: `${telefone}@c.us`,
-      file: { data: base64, name: filename, mimetype },
+      file: { data: `data:${mimetype};base64,${base64}`, name: filename, mimetype },
     }),
     signal: AbortSignal.timeout(30_000),
   });
-  if (!resp.ok) logger.warn('WAHA mídia retornou erro', { status: resp.status, telefone });
+  if (!resp.ok) {
+    const corpo = await resp.text().catch(() => '');
+    logger.error('WAHA mídia retornou erro', { status: resp.status, telefone, corpo });
+    throw new Error(`WAHA ${resp.status}: ${corpo}`);
+  }
 }
 
 // ============================================================
