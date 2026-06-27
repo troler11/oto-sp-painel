@@ -1617,41 +1617,6 @@ const apenasAdmin = (req, res, next) => {
   next();
 };
 
-// Diagnóstico: testa login + cancelamento no iTSaúde
-app.get('/api/itsaude/testar/:id', verificarToken, apenasAdmin, async (req, res) => {
-  const steps = [];
-  try {
-    if (!ITSAUDE_LOGIN || !ITSAUDE_SENHA) return res.json({ ok: false, erro: 'ITSAUDE_LOGIN ou ITSAUDE_SENHA não configurados no .env' });
-    steps.push('env vars OK');
-
-    const loginResp = await fetch('https://api.tisaude.com/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login: ITSAUDE_LOGIN, senha: ITSAUDE_SENHA }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const loginBody = await loginResp.json().catch(() => ({}));
-    steps.push(`login status=${loginResp.status} body=${JSON.stringify(loginBody)}`);
-    if (!loginResp.ok) return res.json({ ok: false, steps, erro: 'Falha no login' });
-
-    const token = loginBody.token || loginBody.access_token || loginBody.data?.token || loginBody.accessToken;
-    if (!token) return res.json({ ok: false, steps, erro: 'Token não encontrado na resposta', campos: Object.keys(loginBody) });
-    steps.push(`token OK (${token.substring(0, 20)}...)`);
-
-    const url = `https://api.tisaude.com/api/schedule/status/update/${req.params.id}/-2`;
-    steps.push(`chamando POST ${url}`);
-    const upResp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10_000),
-    });
-    const upBody = await upResp.text().catch(() => '');
-    steps.push(`update status=${upResp.status} body=${upBody}`);
-    res.json({ ok: upResp.ok, steps });
-  } catch (e) {
-    res.json({ ok: false, steps, erro: e.message });
-  }
-});
 
 app.get('/api/waha/status', verificarToken, apenasAdmin, async (req, res) => {
   if (!WAHA_BASE_URL) return res.status(503).json({ erro: 'WAHA_API_URL não configurado.' });
