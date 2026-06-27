@@ -890,7 +890,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
           )
           OR
           c.ultima_mensagem > (
-            SELECT MAX(a.data_atendimento)
+            SELECT MAX(a.data_atualizacao)
             FROM agendamentos a
             JOIN contatos_whatsapp c2 ON c2.id = a.contato_id
             WHERE c2.telefone = c.telefone
