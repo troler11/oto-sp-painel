@@ -80,6 +80,7 @@ tags: [backend, funções, referência]
 - Status válidos: `PENDENTE`, `EM ATENDIMENTO`, `AGENDADO`, `FINALIZADO`, `CANCELADO`
 - Finalizar de `EM ATENDIMENTO → FINALIZADO` direto (sem `data_consulta`) é caminho válido para dúvidas rápidas
 - Se `CANCELADO` + `notificar=true`: envia mensagem WhatsApp via WAHA
+- **Se `CANCELADO` + `agendamentos.id_itsaude` preenchido**: chama `cancelarNoItsaude(id_itsaude)` para cancelar no iTSaúde. Se falhar, OtoFlow cancela normalmente e retorna `{ avisoItsaude: '<mensagem>' }` no JSON — frontend exibe como toast de aviso.
 - Emite evento `agendamento:atualizado` via Socket.io
 - Recepcionista não pode alterar card assumido por outra pessoa
 - **Reset do contato em `contatos_whatsapp` ao mudar para:**
@@ -142,6 +143,7 @@ coleta_medico = '', nome_atendimento = '', coleta_id_tisaude = ''
 
 ### `GET /api/chat/:telefone`
 - Busca mensagens em `chat_messages` com `session_id LIKE '55119..%'`
+- Suporta `?desde=<ISO>`: retorna apenas mensagens com `created_at > desde` (polling incremental). Frontend envia `desde + 1ms` para evitar re-fetch da última mensagem (PostgreSQL guarda microsegundos, JS só tem milissegundos).
 - Para cada mensagem com `additional_kwargs.midia_id` (ou `data.additional_kwargs.midia_id`), faz batch-fetch em `mensagens_midia` e inclui `mediaBase64` + `mediaMimetype` na resposta
 - O `LIKE` cobre todos os formatos históricos: bare, `@s.whatsapp.net`, `-v23-UUID`
 
@@ -153,7 +155,7 @@ coleta_medico = '', nome_atendimento = '', coleta_id_tisaude = ''
 - Recebe arquivo via multipart (campo `arquivo`, multer memoryStorage, 10MB max)
 - Encoding do nome: `Buffer.from(originalname, 'latin1').toString('utf8')`
 - `image/*` → WAHA `/api/sendImage`; outros → `/api/sendFile` com `file.filename` (não `name`)
-- Salva em `chat_messages` com `additional_kwargs: { mediaBase64, mediaMimetype, sender }`
+- **Salva base64 em `mensagens_midia`** e guarda apenas `midia_id` em `chat_messages.additional_kwargs` — evita coluna JSONB gigante
 
 ### `PUT /api/chat/:telefone/interromper-robo`
 - Atualiza `status_robo = 'Humano'` em `contatos_whatsapp`
@@ -199,6 +201,13 @@ coleta_medico = '', nome_atendimento = '', coleta_id_tisaude = ''
 - `{ bloquear: false }` → `status_robo = 'Robô'`
 
 **status_robo = 'Bloqueado':** mensagens do paciente chegam ao chat do staff (salvas em `chat_messages`), bot N8N não responde (N8N deve checar `status_robo` antes de agir). Contato não aparece em Leads nem Triagem.
+
+### `GET /api/contatos/:telefone/foto`
+- Busca foto de perfil do WhatsApp via WAHA: `GET /api/contacts/profile-picture?contactId=${tel}@s.whatsapp.net&session=${WAHA_SESSION}`
+- Campo retornado pelo WAHA: `profilePictureURL` (URL em maiúsculo)
+- Cache em memória de 1h. Sentinela `'NONE'` (string) para contatos sem foto — **nunca `null`**, pois `getCache` retorna `null` tanto para chave não encontrada quanto para valor nulo
+- Se WAHA offline (`WAHA_BASE_URL` não definida): retorna `503`
+- Retorna `{ url: '...' }` ou `404`
 
 ---
 
@@ -266,13 +275,15 @@ coleta_medico = '', nome_atendimento = '', coleta_id_tisaude = ''
 | `enviarWhatsApp(telefone, texto)` | POST para WAHA_API_URL com timeout de 10s |
 | `wahaHeaders()` | Retorna `{ 'Content-Type': 'application/json', 'X-Api-Key': WAHA_API_KEY }` |
 | `setCache(key, value, ttlMs)` | Salva valor em Map com TTL |
-| `getCache(key)` | Retorna valor do cache se não expirado |
+| `getCache(key)` | Retorna valor do cache se não expirado, `null` para chave não encontrada OU valor nulo — use sentinela `'NONE'` para distinguir "sem resultado" de "não buscado" |
 | `clearCache(prefix)` | Remove todas as chaves que começam com o prefixo |
 | `validar.email(v)` | Regex de email |
 | `validar.minLen(v, n)` | String com mínimo de n caracteres |
 | `validar.numero(v, min)` | Número numérico >= min |
 | `validar.time(v)` | Formato `HH:MM` ou `HH:MM:SS` |
 | `validar.date(v)` | Data parseable pelo JS |
+| `_loginItsaude()` | POST `https://api.tisaude.com/api/login` com `ITSAUDE_LOGIN`/`ITSAUDE_SENHA`. Salva token + expiração (50min). Retorna `access_token`. |
+| `cancelarNoItsaude(idItsaude)` | POST `https://api.tisaude.com/api/schedule/status/update/:id/-2` com Bearer token. Auto-refresh em 401. Lança erro se falhar. |
 
 ---
 

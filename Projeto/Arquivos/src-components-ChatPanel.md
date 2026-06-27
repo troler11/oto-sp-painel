@@ -47,6 +47,20 @@ useEffect(() => {
 - Admin/gerente veem botões de editar/remover por modelo (`opacity-0 group-hover:opacity-100`)
 - Botão "Gerir" → abre `TemplateModal` completo
 
+## Avatar no header
+
+Usa `useProfilePic(pacienteAtivoChat.telefone)` para exibir foto de perfil WhatsApp. Estado `fotoErro` faz fallback para div com iniciais brancas sobre fundo semitransparente.
+
+```tsx
+{fotoPerfil && !fotoErro ? (
+  <img src={fotoPerfil} className="w-11 h-11 rounded-full object-cover border-2 border-white/30" onError={() => setFotoErro(true)} />
+) : (
+  <div className="w-11 h-11 bg-white/15 border border-white/20 rounded-full ...">
+    {pacienteAtivoChat.nome_paciente?.substring(0, 2).toUpperCase()}
+  </div>
+)}
+```
+
 ## `bloquearEnvio`
 
 Quando `true`, input fica desabilitado e placeholder exibe "Apenas leitura...". Ocorre quando outro atendente já assumiu o paciente e o usuário atual não é admin/gerente.

@@ -51,7 +51,8 @@ oto-sp-painel/
 │   │   │   └── AppContext.tsx       # sessão, fetchSeguro, notificações
 │   │   ├── hooks/
 │   │   │   ├── useConfirm.tsx       # substitui window.confirm()
-│   │   │   └── useToast.tsx         # toast com auto-dismiss 4s
+│   │   │   ├── useToast.tsx         # toast com auto-dismiss 4s
+│   │   │   └── useProfilePic.ts     # foto de perfil WhatsApp via WAHA, cache em módulo
 │   │   └── utils/
 │   │       └── helpers.ts           # formatação, getAvatarCor, getUrgencia
 │   ├── vite.config.ts               # proxy /api e /socket.io → localhost:3000

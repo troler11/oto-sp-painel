@@ -76,11 +76,25 @@ Baseado em `getUrgencia(item.data_criacao)`:
 | `media` (> 30 min) | `border-amber-200` | âmbar |
 | `normal` | `border-slate-200` | nenhum |
 
-## Avatar colorido
+## Avatar — foto de perfil ou iniciais
 
-```ts
-const avatarCor = getAvatarCor(item.nome_paciente);
-// <div className={`w-10 h-10 rounded-full ${avatarCor} ...`}>
+Usa `useProfilePic(item.telefone)` para buscar a foto de perfil do WhatsApp via WAHA. Estado `fotoErro` captura falhas de carregamento da imagem.
+
+```tsx
+const fotoPerfil = useProfilePic(item.telefone);
+const [fotoErro, setFotoErro] = useState(false);
+// Se foto disponível:
+<img src={fotoPerfil} className="w-10 h-10 rounded-full object-cover" onError={() => setFotoErro(true)} />
+// Fallback:
+<div className={`w-10 h-10 rounded-full ${getAvatarCor(item.nome_paciente)} ...`}>iniciais</div>
 ```
 
-Mesma lógica aplicada ao avatar do atendente exibido no badge.
+A mesma lógica `getAvatarCor` é aplicada ao avatar do atendente exibido no badge.
+
+## Campo telefone
+
+Exibido abaixo de CPF e data de nascimento:
+
+```tsx
+{item.telefone && <p className="text-xs text-slate-500">Tel: {item.telefone}</p>}
+```

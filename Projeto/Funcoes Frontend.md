@@ -29,7 +29,7 @@ tags: [frontend, funções, referência]
 | `confirmarDataEHora(e)` | PUT `/api/agendar` com data, hora e médico → status `AGENDADO` |
 | `finalizarAtendimento(id)` | Confirm → PUT `/api/status` → `FINALIZADO`. Disponível em `EM ATENDIMENTO` e `AGENDADO` |
 | `iniciarCancelamento(paciente)` | Abre `CancelModal` com paciente selecionado |
-| `confirmarCancelamento(e)` | PUT `/api/status` → `CANCELADO` com motivo. Se estava `AGENDADO`, envia notificação WhatsApp |
+| `confirmarCancelamento(e)` | PUT `/api/status` → `CANCELADO` com motivo. Se estava `AGENDADO`, envia notificação WhatsApp. Se resposta incluir `avisoItsaude`, exibe toast de aviso (cancelamento iTSaúde falhou). |
 
 ### Drag & Drop
 | Função | Descrição |
@@ -48,7 +48,7 @@ tags: [frontend, funções, referência]
 
 **Atualização em tempo real do chat:**
 - Socket.io: handler `mensagem:nova` usa `pacienteAtivoChatRef.current` (ref, não closure) para comparar telefone e evitar o bug de closure estale no `useEffect([sessao])`
-- Polling de fallback: quando `chatAberto`, faz GET `/api/chat/:tel` a cada 5s e atualiza se o número de mensagens mudou
+- Polling de fallback: quando `chatAberto`, faz GET `/api/chat/:tel?desde=<ultimo_timestamp+1ms>` a cada 5s — incremental, traz só mensagens novas. O `+1ms` resolve a diferença de precisão microsegundo (PostgreSQL) vs milissegundo (JS). `ultimaMsgDataRef` guarda o timestamp da última mensagem conhecida.
 
 ### Leads e Triagem
 | Função | Descrição |
@@ -106,6 +106,18 @@ tags: [frontend, funções, referência]
 
 ## Hooks customizados
 
+### `useProfilePic(telefone)` — `src/hooks/useProfilePic.ts`
+Hook que busca a foto de perfil do WhatsApp de um contato via `GET /api/contatos/:tel/foto`. Cache em módulo (Map), persiste entre re-renders sem re-fetch. Retorna `string | null` (URL da foto ou null se sem foto / WAHA offline).
+
+```ts
+const foto = useProfilePic(item.telefone);
+// usar junto com estado fotoErro para fallback:
+// foto && !fotoErro → <img onError={() => setFotoErro(true)} />
+// caso contrário → div com iniciais coloridas (getAvatarCor)
+```
+
+Usado em: `PatientCard`, `ProfileAvatar` (App.tsx — lead cards e aba Contatos), `ChatPanel`.
+
 ### `useConfirm()` — `src/hooks/useConfirm.tsx`
 Substitui `window.confirm()` por um modal estilizado que retorna `Promise<boolean>`.
 
@@ -150,9 +162,10 @@ toast('Mensagem', 'sucesso');  // tipos: 'sucesso' | 'erro' | 'info' | 'aviso'
 |---|---|---|
 | `Sidebar` | `components/Sidebar.tsx` | Navegação lateral colapsável, badges de contagem, ações admin+gerente |
 | `Header` | `components/Header.tsx` | Barra superior, busca, filtro de datas, painel de notificações |
-| `PatientCard` | `components/PatientCard.tsx` | Card do kanban com timer ao vivo, avatar colorido, ações por status. CANCELADO mostra "Consulta Cancelada" (vermelho, com data_consulta) ou "Ticket Descartado" (cinza, sem data_consulta) |
+| `PatientCard` | `components/PatientCard.tsx` | Card do kanban com timer ao vivo, avatar (foto de perfil WhatsApp ou iniciais coloridas), telefone visível, ações por status. CANCELADO mostra "Consulta Cancelada" (vermelho, com data_consulta) ou "Ticket Descartado" (cinza, sem data_consulta) |
 | `Dashboard` | `components/Dashboard.tsx` | Relatórios, KPIs, gráficos. Cancelamentos separados em "Consultas Canceladas" e "Tickets Descartados" |
-| `ChatPanel` | `components/ChatPanel.tsx` | Painel lateral de chat WhatsApp. Filtra blocos N8N, renderiza imagens inline e docs como link de download. Botão Paperclip para enviar mídia. |
+| `ChatPanel` | `components/ChatPanel.tsx` | Painel lateral de chat WhatsApp. Header mostra foto de perfil WhatsApp (ou iniciais). Filtra blocos N8N, renderiza imagens inline e docs como link de download. Botão Paperclip para enviar mídia. |
+| `ProfileAvatar` | inline em `App.tsx` | Componente reutilizável que usa `useProfilePic` para exibir foto de perfil ou iniciais coloridas. Usado em lead cards (Triagem/Leads) e aba Contatos. |
 | `PatientTimeline` | `components/PatientTimeline.tsx` | Modal com histórico cronológico de eventos do paciente |
 | `CardSkeleton` | `components/CardSkeleton.tsx` | Skeleton loading com animação shimmer |
 | `ConfirmModal` | `components/ConfirmModal.tsx` | Modal de confirmação com 3 tipos: perigo/aviso/info |

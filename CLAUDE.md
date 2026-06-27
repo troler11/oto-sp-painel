@@ -60,13 +60,15 @@ Qualquer lógica que deva aplicar-se **apenas a consultas reais** deve incluir `
 ### Socket.io
 Conexão iniciada em `useEffect` após login (`io({ withCredentials: true })`). O backend autentica o socket via middleware que lê o mesmo cookie `token`. Eventos: `agendamento:atualizado` e `mensagem:nova`.
 
-O handler `mensagem:nova` usa `pacienteAtivoChatRef` (não a variável de estado diretamente) para evitar closure stale — o `useEffect` do socket só roda uma vez ao logar. Além disso, existe um polling de fallback de 5s enquanto `chatAberto` for verdadeiro.
+O handler `mensagem:nova` usa `pacienteAtivoChatRef` (não a variável de estado diretamente) para evitar closure stale — o `useEffect` do socket só roda uma vez ao logar. Além disso, existe um polling de fallback de 5s enquanto `chatAberto` for verdadeiro que busca **apenas mensagens novas** via `?desde=<timestamp>+1ms` (merge incremental — não refaz o histórico completo).
 
 ### Tipos TypeScript
 Todas as interfaces estão em `frontend/src/types.ts`. Sempre importar como `import type { ... }` — o Vite com rolldown falha no build se usar import de valor para tipos.
 
 ### Cache in-memory (backend)
 Rotas `GET /api/medicos` (5min) e `GET /api/modelos` (2min) usam cache Map. Chamar `clearCache('medicos:')` ou `clearCache('modelos:')` após qualquer escrita nessas entidades.
+
+`GET /api/contatos/:telefone/foto` cacheia a URL da foto de perfil WAHA por 1h. Usa sentinela `'NONE'` (string) para indicar "sem foto cacheado" — **nunca** usar `null`, pois `getCache` retorna `null` tanto para chave inexistente quanto para valor `null`, tornando os casos indistinguíveis.
 
 ### Papéis de usuário
 `admin` e `gerente` têm acesso total. `recepcao` não pode alterar cards assumidos por outros atendentes (verificação em `PUT /api/status` e `PUT /api/agendar`).
@@ -153,7 +155,15 @@ Ver `.env` na raiz (não commitado) ou `Configuracao/Variaveis de Ambiente.md` n
 
 Encoding do nome: `Buffer.from(originalname, 'latin1').toString('utf8')` — corrige caracteres especiais do multer.
 
-Salva em `chat_messages` com `additional_kwargs: { mediaBase64, mediaMimetype, sender }`.
+Salva **midia_id** em `chat_messages.additional_kwargs` (o base64 vai para `mensagens_midia`, não inline no JSONB — evita coluna gigante).
+
+### Foto de perfil WhatsApp
+`GET /api/contatos/:telefone/foto` — busca via `GET /api/contacts/profile-picture?contactId=${tel}@s.whatsapp.net&session=${WAHA_SESSION}` no WAHA. Campo retornado: `profilePictureURL` (URL em maiúsculo). Cache de 1h com sentinela `'NONE'` para sem-foto.
+
+Frontend: hook `useProfilePic` (`frontend/src/hooks/useProfilePic.ts`) com cache em módulo Map. Usado em: `PatientCard`, `ProfileAvatar` (lead cards + aba Contatos em App.tsx), `ChatPanel` header. Fallback para iniciais coloridas via `onError`. CSP liberado para `https://*.whatsapp.net` no helmet.
+
+### Integração iTSaúde
+Ao cancelar agendamento com `agendamentos.id_itsaude` preenchido, backend chama `POST https://api.tisaude.com/api/schedule/status/update/:id/-2`. Login automático via `POST /api/login` (credenciais `ITSAUDE_LOGIN` / `ITSAUDE_SENHA`) com token cacheado por 50min. Auto-relogin em 401. Falha no iTSaúde não bloqueia o cancelamento — OtoFlow cancela e retorna `{ avisoItsaude: '...' }` para o frontend exibir como toast de aviso.
 
 ## Banco de dados
 Script de criação completo em `banco/migrations.sql`. Tabelas criadas automaticamente pelo servidor: `auditoria_log`, `refresh_tokens`, `mensagens_midia`. As demais (`usuarios`, `agendamentos`, `contatos_whatsapp`, `medicos`, `chat_messages`, `modelos_mensagem`) precisam ser criadas manualmente antes do primeiro uso.
