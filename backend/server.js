@@ -1426,22 +1426,22 @@ app.get('/api/contatos/:telefone/foto', verificarToken, async (req, res) => {
   const tel = req.params.telefone.replace(/\D/g, '');
   const cacheKey = `foto:${tel}`;
   const cached = getCache(cacheKey);
-  if (cached !== undefined) {
-    return cached ? res.json({ url: cached }) : res.status(404).end();
-  }
+  // 'NONE' = sem foto (cacheado); null = não está em cache
+  if (cached === 'NONE') return res.status(404).end();
+  if (cached) return res.json({ url: cached });
   try {
     const resp = await fetch(
       `${WAHA_BASE_URL}/api/contacts/profile-picture?contactId=${tel}@s.whatsapp.net&session=${WAHA_SESSION}`,
       { headers: wahaHeaders(), signal: AbortSignal.timeout(5_000) }
     );
-    if (!resp.ok) { setCache(cacheKey, null, 60 * 60 * 1000); return res.status(404).end(); }
+    if (!resp.ok) { setCache(cacheKey, 'NONE', 60 * 60 * 1000); return res.status(404).end(); }
     const data = await resp.json();
     const url = data.eurl || data.profilePictureUrl || null;
+    if (!url) { setCache(cacheKey, 'NONE', 60 * 60 * 1000); return res.status(404).end(); }
     setCache(cacheKey, url, 60 * 60 * 1000);
-    if (!url) return res.status(404).end();
     res.json({ url });
   } catch {
-    setCache(cacheKey, null, 60 * 60 * 1000);
+    setCache(cacheKey, 'NONE', 60 * 60 * 1000);
     res.status(404).end();
   }
 });
