@@ -1209,7 +1209,7 @@ app.post('/api/chat/enviar-midia', verificarToken, upload.single('arquivo'), asy
 
   const telefoneLimpo = telefone.replace(/\D/g, '');
   const base64 = req.file.buffer.toString('base64');
-  const filename = req.file.originalname;
+  const filename = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
   const mimetype = req.file.mimetype;
 
   try {
