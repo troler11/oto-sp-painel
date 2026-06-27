@@ -53,12 +53,16 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
         {mensagens.map((msg, idx) => {
-          // Strip N8N blocks ANTES do split em $$$, pois $$$  pode estar dentro do bloco
-          const textoFinal = msg.texto
-            .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
-            .replace(/\[[A-Z][A-Z0-9_ ]*:[^\]]*\]/g, '')
-            .replace(/\[[A-Z][A-Z0-9_]+\]/g, '')
-            .split('$$$')[0].trim();
+          // Se contiver [Mensagem original: TEXTO], exibe só o TEXTO e ignora o resto
+          const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
+          // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
+          const textoFinal = msgOriginalMatch
+            ? msgOriginalMatch[1].trim()
+            : msg.texto
+                .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
+                .replace(/\[[A-Z][A-Z0-9_ ]*:[^\]]*\]/g, '')
+                .replace(/\[[A-Z][A-Z0-9_]+\]/g, '')
+                .split('$$$')[0].trim();
           if (!textoFinal) return null;
           try { if (textoFinal.startsWith('{') && JSON.parse(textoFinal)) return null; } catch { /* não é JSON */ }
           return (
