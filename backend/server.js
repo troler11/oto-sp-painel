@@ -943,10 +943,10 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
       return res.json(r);
     }
 
-    const hoje = new Date().toISOString().slice(0, 10);
-    const tresAnosAtras = new Date(Date.now() - 3 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const doisAnosFuturo = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const cincoAnosAtras = new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const tResp = await fetch(
-      `https://api.tisaude.com/api/patients/${paciente.id}/timeline?startDate=${tresAnosAtras}&endDate=${hoje}&page=1`,
+      `https://api.tisaude.com/api/patients/${paciente.id}/timeline?startDate=${cincoAnosAtras}&endDate=${doisAnosFuturo}&page=1`,
       { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8_000) }
     );
 
