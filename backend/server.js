@@ -953,6 +953,7 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
     let totalConsultas = 0;
     if (tResp.ok) {
       const tData = await tResp.json();
+      logger.info('iTSaude timeline raw', { paciente_id: paciente.id, tData: JSON.stringify(tData).slice(0, 2000) });
       for (const dia of (tData.data || [])) {
         for (const ev of (dia.data || [])) {
           if (ev.type !== 'appointment') continue;
