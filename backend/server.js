@@ -1192,7 +1192,11 @@ app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
     );
 
     // Batch-fetch mídia recebida de pacientes (armazenada em mensagens_midia)
-    const midiaIds = rows.map(r => r.message?.additional_kwargs?.midia_id).filter(Boolean);
+    // midia_id pode estar em msg.additional_kwargs (novo) ou msg.data.additional_kwargs (formato N8N/WAHA)
+    const midiaIds = rows.map(r => {
+      const m = r.message;
+      return m?.additional_kwargs?.midia_id || m?.data?.additional_kwargs?.midia_id;
+    }).filter(Boolean);
     let midiaMap = {};
     if (midiaIds.length > 0) {
       const midiaRows = await pool.query(
@@ -1204,14 +1208,14 @@ app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
 
     const formatado = rows.map(r => {
       const msg = r.message;
-      const midiaId = msg.additional_kwargs?.midia_id;
-      const midia = midiaId ? midiaMap[midiaId] : null;
+      const ak = msg.additional_kwargs || msg.data?.additional_kwargs || {};
+      const midia = ak.midia_id ? midiaMap[ak.midia_id] : null;
       return {
         texto: msg.content || msg.data?.content || msg.text || '',
         origem: (msg.type === 'human' || msg.sender === 'human') ? 'paciente' : 'ia_ou_recepcao',
         data: r.created_at,
-        mediaBase64: msg.additional_kwargs?.mediaBase64 || midia?.conteudo_base64 || null,
-        mediaMimetype: msg.additional_kwargs?.mediaMimetype || midia?.mimetype || null,
+        mediaBase64: ak.mediaBase64 || midia?.conteudo_base64 || null,
+        mediaMimetype: ak.mediaMimetype || midia?.mimetype || ak.mimetype || null,
       };
     });
     res.json(formatado);
