@@ -20,15 +20,14 @@ import { useToast } from './hooks/useToast';
 import { useProfilePic } from './hooks/useProfilePic';
 import { useClassificacaoItsaude, prefetchClassificacoes } from './hooks/useClassificacaoItsaude';
 
-function LeadClassificacaoBadge({ leadId, isTriage }: { leadId: number; isTriage: boolean }) {
+function LeadClassificacaoBadge({ leadId }: { leadId: number }) {
   const { classificacao, total_consultas } = useClassificacaoItsaude(leadId);
   if (!classificacao) return null;
-  if (classificacao === 'novo_paciente') return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-blue-50 text-blue-600 border border-blue-200">Novo Paciente</span>
-  );
-  if (!isTriage) return null;
   if (classificacao === 'novo_lead') return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-slate-100 text-slate-500 border border-slate-200">Novo Lead</span>
+  );
+  if (classificacao === 'novo_paciente') return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-blue-50 text-blue-600 border border-blue-200">Novo Paciente</span>
   );
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[9px] font-extrabold uppercase tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -208,9 +207,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (filtro !== 'LEADS' || leads.length === 0) return;
-    prefetchClassificacoes(leads.map(l => l.id)).then(setClassificacoesLeads);
-  }, [filtro, leads]);
+    if (filtro !== 'LEADS' || contatos.length === 0) return;
+    prefetchClassificacoes(contatos.map(c => c.id)).then(setClassificacoesLeads);
+  }, [filtro, contatos]);
 
   useEffect(() => {
     if (!sessao) return;
@@ -666,6 +665,17 @@ export default function App() {
   const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO', 'CANCELADO'] as const;
   const filtrosLeads = aplicarFiltros(leads, true);
   const filtrosAg = aplicarFiltros(agendamentos);
+  const listaLeads = contatos
+    .filter(c => c.status_robo !== 'Bloqueado')
+    .filter(c => {
+      const cl = classificacoesLeads[c.id];
+      return cl === undefined || cl === 'novo_lead' || cl === 'novo_paciente';
+    })
+    .filter(c => {
+      if (!searchTerm) return true;
+      const nome = (c.nome_atendimento || c.nome_titular || c.telefone).toLowerCase();
+      return nome.includes(searchTerm.toLowerCase()) || c.telefone.includes(searchTerm);
+    });
 
   const exportarLeadsCSV = () => {
     const BOM = '﻿';
@@ -693,7 +703,7 @@ export default function App() {
       const isTriage = filtro === 'TRIAGEM';
       const lista = isTriage
         ? filtrosLeads.filter(l => l.sessao_intencao !== 'concluido')
-        : filtrosLeads;
+        : listaLeads;
       return lista.length ? lista.map(lead => (
         <div key={lead.id} className={`bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all relative flex flex-col group`}>
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
@@ -728,7 +738,7 @@ export default function App() {
                 {(lead.nome_atendimento || lead.nome_titular) && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
                 {!isTriage && lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{tempoAtras(lead.ultima_mensagem)}</p>
-                <div className="mt-1"><LeadClassificacaoBadge leadId={lead.id} isTriage={isTriage} /></div>
+                <div className="mt-1"><LeadClassificacaoBadge leadId={lead.id} /></div>
               </div>
             </div>
             {isTriage && <span className={`px-2 py-1 rounded-lg text-[9px] font-extrabold uppercase tracking-wider ${lead.status_robo === 'Robô' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}`}>{lead.status_robo === 'Robô' ? '🤖 Bot' : '👤 Pausado'}</span>}
@@ -883,7 +893,7 @@ export default function App() {
 
             {filtro === 'LEADS' && (
               <div className="flex justify-between items-center mb-5">
-                <p className="text-sm font-bold text-slate-500">{filtrosLeads.length} leads encontrados</p>
+                <p className="text-sm font-bold text-slate-500">{listaLeads.length} leads encontrados</p>
                 <button onClick={exportarLeadsCSV} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm">
                   <Download size={15} /> Exportar Excel
                 </button>
