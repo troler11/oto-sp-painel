@@ -1010,7 +1010,7 @@ app.put('/api/status', verificarToken, async (req, res) => {
     if (data_cancelamento)  { query += `, data_cancelamento = $${p++}`;  params.push(data_cancelamento); }
 
     query += `, data_atualizacao = NOW()`;
-    query += ` WHERE id = $${p} RETURNING contato_id, nome_paciente, especialidade, unidade, coleta_id_tisaude`;
+    query += ` WHERE id = $${p} RETURNING contato_id, nome_paciente, especialidade, unidade, id_itsaude`;
     params.push(id);
 
     const { rows: agendados } = await pool.query(query, params);
@@ -1059,12 +1059,12 @@ app.put('/api/status', verificarToken, async (req, res) => {
         await enviarWhatsApp(tel, msg);
       }
 
-      if (ag.coleta_id_tisaude) {
+      if (ag.id_itsaude) {
         try {
-          await cancelarNoItsaude(ag.coleta_id_tisaude);
-          logger.info('Consulta cancelada no iTSaúde', { id_itsaude: ag.coleta_id_tisaude });
+          await cancelarNoItsaude(ag.id_itsaude);
+          logger.info('Consulta cancelada no iTSaúde', { id_itsaude: ag.id_itsaude });
         } catch (e) {
-          logger.error('Falha ao cancelar no iTSaúde', { error: e.message, id_itsaude: ag.coleta_id_tisaude });
+          logger.error('Falha ao cancelar no iTSaúde', { error: e.message, id_itsaude: ag.id_itsaude });
           avisoItsaude = 'Falha ao cancelar no iTSaúde — verifique manualmente.';
         }
       }
