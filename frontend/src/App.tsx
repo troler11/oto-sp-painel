@@ -18,7 +18,7 @@ import { tempoAtras, getAvatarCor } from './utils/helpers';
 import { useConfirm } from './hooks/useConfirm';
 import { useToast } from './hooks/useToast';
 import { useProfilePic } from './hooks/useProfilePic';
-import { useClassificacaoItsaude } from './hooks/useClassificacaoItsaude';
+import { useClassificacaoItsaude, prefetchClassificacoes } from './hooks/useClassificacaoItsaude';
 
 function LeadClassificacaoBadge({ leadId, isTriage }: { leadId: number; isTriage: boolean }) {
   const { classificacao, total_consultas } = useClassificacaoItsaude(leadId);
@@ -156,6 +156,9 @@ export default function App() {
   const [editandoUsuarioId, setEditandoUsuarioId] = useState<number | null>(null);
   const [novoNomeGestao, setNovoNomeGestao] = useState('');
 
+  // ── Classificação iTSaúde (Recuperação de Leads) ─────────────
+  const [classificacoesLeads, setClassificacoesLeads] = useState<Record<number, string | null>>({});
+
   // ── Drag & Drop ───────────────────────────────────────────────
   const [dragAtivo, setDragAtivo] = useState<Agendamento | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
@@ -203,6 +206,11 @@ export default function App() {
     };
     restaurar();
   }, []);
+
+  useEffect(() => {
+    if (filtro !== 'LEADS' || leads.length === 0) return;
+    prefetchClassificacoes(leads.map(l => l.id)).then(setClassificacoesLeads);
+  }, [filtro, leads]);
 
   useEffect(() => {
     if (!sessao) return;
@@ -686,7 +694,7 @@ export default function App() {
       const isTriage = filtro === 'TRIAGEM';
       const lista = isTriage
         ? filtrosLeads.filter(l => l.sessao_intencao !== 'concluido')
-        : filtrosLeads;
+        : filtrosLeads.filter(l => classificacoesLeads[l.id] !== 'recorrente');
       return lista.length ? lista.map(lead => (
         <div key={lead.id} className={`bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all relative flex flex-col group`}>
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
