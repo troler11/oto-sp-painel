@@ -955,7 +955,7 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
       const tData = await tResp.json();
       // Se há mais de uma página, o paciente tem histórico — conta como recorrente
       if ((tData.current_page || 1) > 1 || tData.prev_page_url) {
-        totalConsultas = 999;
+        totalConsultas = -1; // sinaliza recorrente sem contagem exata
       } else {
         for (const dia of (tData.data || [])) {
           for (const ev of (dia.data || [])) {
@@ -967,8 +967,8 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
       }
     }
 
-    const resultado = totalConsultas > 0
-      ? { classificacao: 'recorrente', nome_itsaude: paciente.name, total_consultas: totalConsultas }
+    const resultado = totalConsultas !== 0
+      ? { classificacao: 'recorrente', nome_itsaude: paciente.name, ...(totalConsultas > 0 && { total_consultas: totalConsultas }) }
       : { classificacao: 'novo_paciente', nome_itsaude: paciente.name };
 
     setCache(cacheKey, resultado, 30 * 60_000);
