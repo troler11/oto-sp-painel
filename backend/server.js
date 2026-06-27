@@ -889,7 +889,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
           )
           OR
           c.ultima_mensagem > (
-            SELECT MAX(COALESCE(a.data_atualizacao, a.data_criacao))
+            SELECT MAX(a.data_atendimento)
             FROM agendamentos a
             WHERE a.contato_id = c.id
             AND a.status_atendimento = 'AGENDADO'
@@ -903,7 +903,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
           )
           OR
           c.ultima_mensagem > (
-            SELECT MAX(COALESCE(a.data_atualizacao, a.data_criacao))
+            SELECT MAX(a.data_atendimento)
             FROM agendamentos a
             WHERE a.contato_id = c.id
             AND a.status_atendimento = 'FINALIZADO'
