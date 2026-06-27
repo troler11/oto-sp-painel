@@ -1351,7 +1351,7 @@ app.post('/api/leads/:id/converter', verificarToken, async (req, res) => {
     `, [lead.id, lead.nome_atendimento || lead.nome_titular || lead.telefone || 'Paciente sem nome', lead.cpf_titular || null]);
 
     await pool.query(
-      `UPDATE contatos_whatsapp SET status_robo='Finalizado' WHERE id=$1`,
+      `UPDATE contatos_whatsapp SET status_robo='Humano' WHERE id=$1`,
       [lead.id]
     );
 
