@@ -879,7 +879,21 @@ app.get('/api/leads', verificarToken, async (req, res) => {
         NOT EXISTS (
           SELECT 1 FROM agendamentos a
           WHERE a.contato_id = c.id
-          AND a.status_atendimento IN ('PENDENTE', 'EM ATENDIMENTO', 'AGENDADO')
+          AND a.status_atendimento IN ('PENDENTE', 'EM ATENDIMENTO')
+        )
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM agendamentos a
+            WHERE a.contato_id = c.id
+            AND a.status_atendimento = 'AGENDADO'
+          )
+          OR
+          c.ultima_mensagem > (
+            SELECT MAX(COALESCE(a.data_atualizacao, a.data_criacao))
+            FROM agendamentos a
+            WHERE a.contato_id = c.id
+            AND a.status_atendimento = 'AGENDADO'
+          )
         )
         AND (
           NOT EXISTS (
