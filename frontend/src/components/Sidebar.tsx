@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Clock, Zap, CalendarDays, CheckCircle2, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi, Users } from 'lucide-react';
+import { Activity, Clock, Zap, CalendarDays, CheckCircle2, CheckCheck, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getAvatarCor } from '../utils/helpers';
 
@@ -20,6 +20,7 @@ const ABAS_NAV = [
   { id: 'PENDENTE', icon: <Clock size={17} />, label: 'Pendentes' },
   { id: 'EM ATENDIMENTO', icon: <Zap size={17} />, label: 'Em Atendimento' },
   { id: 'AGENDADO', icon: <CalendarDays size={17} />, label: 'Agendados' },
+  { id: 'CONFIRMADO', icon: <CheckCheck size={17} />, label: 'Confirmados' },
   { id: 'FINALIZADO', icon: <CheckCircle2 size={17} />, label: 'Finalizados' },
   { id: 'CANCELADO', icon: <XCircle size={17} />, label: 'Cancelados' },
 ] as const;

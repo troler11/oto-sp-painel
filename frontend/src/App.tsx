@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import {
@@ -53,12 +53,12 @@ import PatientTimeline from './components/PatientTimeline';
 import ConfirmModal from './components/ConfirmModal';
 import ToastContainer from './components/ToastContainer';
 import { CardSkeletonGrid } from './components/CardSkeleton';
-import ScheduleModal from './components/modals/ScheduleModal';
-import CancelModal from './components/modals/CancelModal';
-import UserModal from './components/modals/UserModal';
-import UserManagementModal from './components/modals/UserManagementModal';
-import TemplateModal from './components/modals/TemplateModal';
-import WahaModal from './components/modals/WahaModal';
+const ScheduleModal = lazy(() => import('./components/modals/ScheduleModal'));
+const CancelModal = lazy(() => import('./components/modals/CancelModal'));
+const UserModal = lazy(() => import('./components/modals/UserModal'));
+const UserManagementModal = lazy(() => import('./components/modals/UserManagementModal'));
+const TemplateModal = lazy(() => import('./components/modals/TemplateModal'));
+const WahaModal = lazy(() => import('./components/modals/WahaModal'));
 
 const API_URL = '/api';
 
@@ -299,9 +299,9 @@ export default function App() {
   };
 
   // ── Notificações ──────────────────────────────────────────────
-  const adicionarNotificacao = (texto: string, tipo: Notificacao['tipo']) => {
+  const adicionarNotificacao = useCallback((texto: string, tipo: Notificacao['tipo']) => {
     setNotificacoes(prev => [{ id: Date.now(), texto, tipo, lida: false, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }, ...prev].slice(0, 20));
-  };
+  }, []);
 
   // ── Auth ──────────────────────────────────────────────────────
   const fazerLogin = async (e: React.FormEvent) => {
@@ -323,7 +323,7 @@ export default function App() {
   };
 
   // ── Chat ──────────────────────────────────────────────────────
-  const carregarChat = async (paciente: Agendamento | Lead, isLead = false) => {
+  const carregarChat = useCallback(async (paciente: Agendamento | Lead, isLead = false) => {
     const tel = String((paciente as any).telefone || '').replace(/\D/g, '');
     if (!tel) { toast('Sem número de contacto válido.', 'erro'); return; }
     const ag = paciente as Agendamento;
@@ -336,7 +336,7 @@ export default function App() {
       const res = await fetchSeguro(`${API_URL}/chat/${tel}`);
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) setMensagens(await res.json());
     } catch (e) { /* silencioso */ }
-  };
+  }, [sessao, toast, fetchSeguro]);
 
   const enviarMensagemChat = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -420,27 +420,27 @@ export default function App() {
   };
 
   // ── Atendimentos ──────────────────────────────────────────────
-  const assumirAtendimento = async (id: number) => {
+  const assumirAtendimento = useCallback(async (id: number) => {
     const nome = sessao!.user.nome; const agora = new Date().toISOString();
     const res = await fetchSeguro(`${API_URL}/status`, { method: 'PUT', body: JSON.stringify({ id, status: 'EM ATENDIMENTO', atendente: nome, data_atendimento: agora }) });
     if (res.ok) { setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, status_atendimento: 'EM ATENDIMENTO', atendente_nome: nome, data_atendimento: agora } : a)); toast('Paciente assumido.', 'sucesso'); adicionarNotificacao('Paciente assumido.', 'sucesso'); }
     else { const d = await res.json().catch(() => ({})); toast(d.erro || 'Falha.', 'erro'); }
-  };
+  }, [sessao, fetchSeguro, toast, adicionarNotificacao]);
 
-  const devolverParaFila = async (id: number) => {
+  const devolverParaFila = useCallback(async (id: number) => {
     const ok = await confirm({ mensagem: 'Devolver este paciente para a fila de Pendentes?', tipo: 'aviso', confirmLabel: 'Devolver' });
     if (!ok) return;
     const res = await fetchSeguro(`${API_URL}/status`, { method: 'PUT', body: JSON.stringify({ id, status: 'PENDENTE', atendente: null }) });
     if (res.ok) setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, status_atendimento: 'PENDENTE', atendente_nome: undefined } : a));
     else { const d = await res.json().catch(() => ({})); toast(d.erro || 'Falha.', 'erro'); }
-  };
+  }, [confirm, fetchSeguro, toast]);
 
-  const iniciarAgendamento = (paciente: Agendamento, isEdicao = false) => {
+  const iniciarAgendamento = useCallback((paciente: Agendamento, isEdicao = false) => {
     setPacienteSelecionado(paciente);
     if (isEdicao) { setMedicoSelecionado(paciente.medico_final || ''); setDataSelecionada(paciente.data_consulta ? paciente.data_consulta.split('T')[0] : ''); setHoraSelecionada(paciente.hora_consulta ? paciente.hora_consulta.substring(0, 5) : ''); }
     else { const mp = paciente.nome_medico && !['Qualquer', 'Indiferente', 'A confirmar'].includes(paciente.nome_medico) ? paciente.nome_medico : ''; setMedicoSelecionado(mp); setDataSelecionada(''); setHoraSelecionada(''); }
     setModalAberto(true);
-  };
+  }, []);
 
   const confirmarDataEHora = async (e: React.FormEvent) => {
     e.preventDefault(); if (!pacienteSelecionado) return;
@@ -449,18 +449,18 @@ export default function App() {
     else { const d = await res.json().catch(() => ({})); toast(d.erro || 'Falha.', 'erro'); }
   };
 
-  const finalizarAtendimento = async (id: number) => {
+  const finalizarAtendimento = useCallback(async (id: number) => {
     const ok = await confirm({ mensagem: 'Deseja marcar esta consulta como finalizada?', tipo: 'info', confirmLabel: 'Finalizar', titulo: 'Concluir Consulta' });
     if (!ok) return;
     const res = await fetchSeguro(`${API_URL}/status`, { method: 'PUT', body: JSON.stringify({ id, status: 'FINALIZADO' }) });
     if (res.ok) { setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, status_atendimento: 'FINALIZADO' } : a)); toast('Consulta finalizada!', 'sucesso'); adicionarNotificacao('Consulta finalizada!', 'sucesso'); }
-  };
+  }, [confirm, fetchSeguro, toast, adicionarNotificacao]);
 
-  const renomearAgendamento = async (id: number, novoNome: string) => {
+  const renomearAgendamento = useCallback(async (id: number, novoNome: string) => {
     const res = await fetchSeguro(`${API_URL}/agendamentos/${id}/nome`, { method: 'PATCH', body: JSON.stringify({ nome: novoNome }) });
     if (res.ok) setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, nome_paciente: novoNome } : a));
     else toast('Erro ao renomear.', 'erro');
-  };
+  }, [fetchSeguro, toast]);
 
   const renomearLead = async (id: number, novoNome: string) => {
     const res = await fetchSeguro(`${API_URL}/leads/${id}/nome`, { method: 'PATCH', body: JSON.stringify({ nome: novoNome }) });
@@ -468,7 +468,7 @@ export default function App() {
     else toast('Erro ao renomear.', 'erro');
   };
 
-  const iniciarCancelamento = (paciente: Agendamento) => { setPacienteCancelamento(paciente); setMotivoCancelamento(''); setModalCancelamentoAberto(true); };
+  const iniciarCancelamento = useCallback((paciente: Agendamento) => { setPacienteCancelamento(paciente); setMotivoCancelamento(''); setModalCancelamentoAberto(true); }, []);
 
   const confirmarCancelamento = async (e: React.FormEvent) => {
     e.preventDefault(); if (!pacienteCancelamento) return;
@@ -565,7 +565,7 @@ export default function App() {
   const abrirEdicaoModelo = (modelo: ModeloMensagem) => { setEditandoModelo(modelo); setNovoModeloForm({ titulo: modelo.titulo, texto: modelo.texto }); setModalModelosAberto(true); setDropdownModelosAberto(false); };
 
   // ── Filtros ───────────────────────────────────────────────────
-  const aplicarFiltros = <T extends Agendamento | Lead>(items: T[], isLead = false): T[] => {
+  const aplicarFiltros = useCallback(<T extends Agendamento | Lead>(items: T[], isLead = false): T[] => {
     return items.filter(item => {
       const ag = item as Agendamento; const ld = item as Lead;
       const termo = searchTerm.toLowerCase();
@@ -582,15 +582,31 @@ export default function App() {
       }
       return matchText && matchData;
     });
-  };
+  }, [searchTerm, dataInicio, dataFim]);
 
-  const contagens: Record<string, number> = {
-    TRIAGEM: leads.filter(l => l.sessao_intencao !== 'concluido').length, PENDENTE: agendamentos.filter(a => a.status_atendimento === 'PENDENTE').length,
+  const contagens = useMemo<Record<string, number>>(() => ({
+    TRIAGEM: leads.filter(l => l.sessao_intencao !== 'concluido').length,
+    PENDENTE: agendamentos.filter(a => a.status_atendimento === 'PENDENTE').length,
     'EM ATENDIMENTO': agendamentos.filter(a => a.status_atendimento === 'EM ATENDIMENTO').length,
     AGENDADO: agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length,
+    CONFIRMADO: agendamentos.filter(a => a.status_atendimento === 'CONFIRMADO').length,
     FINALIZADO: agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length,
     CANCELADO: agendamentos.filter(a => a.status_atendimento === 'CANCELADO').length,
-  };
+  }), [leads, agendamentos]);
+
+  const filtrosLeads = useMemo(() => aplicarFiltros(leads, true), [aplicarFiltros, leads]);
+  const filtrosAg = useMemo(() => aplicarFiltros(agendamentos), [aplicarFiltros, agendamentos]);
+  const listaLeads = useMemo(() => contatos
+    .filter(c => c.status_robo !== 'Bloqueado')
+    .filter(c => {
+      const cl = classificacoesLeads[c.id];
+      return cl === undefined || cl === 'novo_lead' || cl === 'novo_paciente';
+    })
+    .filter(c => {
+      if (!searchTerm) return true;
+      const nome = (c.nome_atendimento || c.nome_titular || c.telefone).toLowerCase();
+      return nome.includes(searchTerm.toLowerCase()) || c.telefone.includes(searchTerm);
+    }), [contatos, searchTerm, classificacoesLeads]);
 
   // ── Loading inicial ───────────────────────────────────────────
   if (verificandoSessaoInicial) {
@@ -662,20 +678,7 @@ export default function App() {
   };
 
   // ── App autenticado ───────────────────────────────────────────
-  const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO', 'CANCELADO'] as const;
-  const filtrosLeads = aplicarFiltros(leads, true);
-  const filtrosAg = aplicarFiltros(agendamentos);
-  const listaLeads = contatos
-    .filter(c => c.status_robo !== 'Bloqueado')
-    .filter(c => {
-      const cl = classificacoesLeads[c.id];
-      return cl === undefined || cl === 'novo_lead' || cl === 'novo_paciente';
-    })
-    .filter(c => {
-      if (!searchTerm) return true;
-      const nome = (c.nome_atendimento || c.nome_titular || c.telefone).toLowerCase();
-      return nome.includes(searchTerm.toLowerCase()) || c.telefone.includes(searchTerm);
-    });
+  const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO', 'FINALIZADO', 'CANCELADO'] as const;
 
   const exportarLeadsCSV = () => {
     const BOM = '﻿';
@@ -774,6 +777,7 @@ export default function App() {
     }
 
     const lista = filtrosAg.filter(a => a.status_atendimento === filtro);
+    if (filtro === 'PENDENTE') lista.sort((a, b) => new Date(a.data_criacao).getTime() - new Date(b.data_criacao).getTime());
 
     if (primeiraCarregamento) return <CardSkeletonGrid count={6} />;
 
@@ -833,7 +837,7 @@ export default function App() {
                   {ABAS.map(aba => (
                     <button key={aba} onClick={() => setFiltro(aba)}
                       className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs transition-all whitespace-nowrap ${filtro === aba ? 'bg-[#005088] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-                      {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
+                      {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'CONFIRMADO' ? 'Confirmados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
                       {(contagens[aba] ?? 0) > 0 && <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filtro === aba ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagens[aba]}</span>}
                     </button>
                   ))}
@@ -1011,12 +1015,12 @@ export default function App() {
         )}
 
         {pacienteTimeline && <PatientTimeline paciente={pacienteTimeline} onClose={() => setPacienteTimeline(null)} />}
-        {modalAberto && pacienteSelecionado && <ScheduleModal paciente={pacienteSelecionado} data={dataSelecionada} setData={setDataSelecionada} hora={horaSelecionada} setHora={setHoraSelecionada} medico={medicoSelecionado} setMedico={setMedicoSelecionado} onSubmit={confirmarDataEHora} onClose={() => setModalAberto(false)} />}
-        {modalCancelamentoAberto && pacienteCancelamento && <CancelModal paciente={pacienteCancelamento} motivo={motivoCancelamento} setMotivo={setMotivoCancelamento} onSubmit={confirmarCancelamento} onClose={() => setModalCancelamentoAberto(false)} />}
-        {modalNovoUsuarioAberto && <UserModal form={novoUsuarioForm} setForm={setNovoUsuarioForm} msg={msgNovoUsuario} onSubmit={criarNovaConta} onClose={() => setModalNovoUsuarioAberto(false)} />}
-        {modalGestaoUsuariosAberto && <UserManagementModal usuarios={listaUsuarios} editandoSenhaId={editandoSenhaId} setEditandoSenhaId={setEditandoSenhaId} novaSenha={novaSenhaGestao} setNovaSenha={setNovaSenhaGestao} editandoUsuarioId={editandoUsuarioId} setEditandoUsuarioId={setEditandoUsuarioId} novoNome={novoNomeGestao} setNovoNome={setNovoNomeGestao} onAtualizarNome={atualizarNomeUsuario} onAlterarSenha={alterarSenhaUsuario} onExcluir={excluirUsuario} onClose={() => { setModalGestaoUsuariosAberto(false); setEditandoSenhaId(null); setEditandoUsuarioId(null); }} />}
-        {modalWahaAberto && <WahaModal onClose={() => setModalWahaAberto(false)} />}
-        {modalModelosAberto && <TemplateModal modelos={modelos} editando={editandoModelo} form={novoModeloForm} setForm={setNovoModeloForm} onSubmit={salvarModelo} onEditar={abrirEdicaoModelo} onRemover={removerModelo} onClose={() => { setModalModelosAberto(false); setEditandoModelo(null); setNovoModeloForm({ titulo: '', texto: '' }); }} />}
+        {modalAberto && pacienteSelecionado && <Suspense fallback={null}><ScheduleModal paciente={pacienteSelecionado} data={dataSelecionada} setData={setDataSelecionada} hora={horaSelecionada} setHora={setHoraSelecionada} medico={medicoSelecionado} setMedico={setMedicoSelecionado} onSubmit={confirmarDataEHora} onClose={() => setModalAberto(false)} /></Suspense>}
+        {modalCancelamentoAberto && pacienteCancelamento && <Suspense fallback={null}><CancelModal paciente={pacienteCancelamento} motivo={motivoCancelamento} setMotivo={setMotivoCancelamento} onSubmit={confirmarCancelamento} onClose={() => setModalCancelamentoAberto(false)} /></Suspense>}
+        {modalNovoUsuarioAberto && <Suspense fallback={null}><UserModal form={novoUsuarioForm} setForm={setNovoUsuarioForm} msg={msgNovoUsuario} onSubmit={criarNovaConta} onClose={() => setModalNovoUsuarioAberto(false)} /></Suspense>}
+        {modalGestaoUsuariosAberto && <Suspense fallback={null}><UserManagementModal usuarios={listaUsuarios} editandoSenhaId={editandoSenhaId} setEditandoSenhaId={setEditandoSenhaId} novaSenha={novaSenhaGestao} setNovaSenha={setNovaSenhaGestao} editandoUsuarioId={editandoUsuarioId} setEditandoUsuarioId={setEditandoUsuarioId} novoNome={novoNomeGestao} setNovoNome={setNovoNomeGestao} onAtualizarNome={atualizarNomeUsuario} onAlterarSenha={alterarSenhaUsuario} onExcluir={excluirUsuario} onClose={() => { setModalGestaoUsuariosAberto(false); setEditandoSenhaId(null); setEditandoUsuarioId(null); }} /></Suspense>}
+        {modalWahaAberto && <Suspense fallback={null}><WahaModal onClose={() => setModalWahaAberto(false)} /></Suspense>}
+        {modalModelosAberto && <Suspense fallback={null}><TemplateModal modelos={modelos} editando={editandoModelo} form={novoModeloForm} setForm={setNovoModeloForm} onSubmit={salvarModelo} onEditar={abrirEdicaoModelo} onRemover={removerModelo} onClose={() => { setModalModelosAberto(false); setEditandoModelo(null); setNovoModeloForm({ titulo: '', texto: '' }); }} /></Suspense>}
       </div>
     </AppContext.Provider>
   );

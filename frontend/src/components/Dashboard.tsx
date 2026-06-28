@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Clock, CreditCard, MapPin, Activity, XCircle, CalendarDays, AlertCircle, TrendingUp, DollarSign, BarChart3, Users, CheckCircle2, FileText, Wallet, Filter, BarChart2, Award, Trash2 } from 'lucide-react';
 import type { Agendamento, Lead } from '../types';
 import { formatarDataBr, formatarHora } from '../utils/helpers';
@@ -8,91 +8,116 @@ interface Props { agendamentos: Agendamento[]; leads: Lead[]; }
 export default function Dashboard({ agendamentos, leads }: Props) {
   const [tabaCancelamento, setTabaCancelamento] = useState<'consultas' | 'descartados'>('consultas');
 
-  const totalAtendimentos = agendamentos.length;
-  const concluidos = agendamentos.filter(a => ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento)).length;
-  const canceladosConsulta = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta).length;
-  const descartados = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && !a.data_consulta).length;
-  const cancelados = canceladosConsulta;
-  const finalizados = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length;
-  // Apenas consultas com data e pagamento preenchidos
-  const consultasAgendadas = agendamentos.filter(a =>
-    ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento) && a.data_consulta && a.pagamento
-  );
-  const particulares = consultasAgendadas.filter(a =>
-    a.pagamento!.toLowerCase().includes('particular') || a.pagamento!.toLowerCase().includes('pix')
-  ).length;
-  const receitaRealizada = particulares * 600;
-  const taxaCancelamento = totalAtendimentos > 0 ? Math.round((cancelados / totalAtendimentos) * 100) : 0;
+  const {
+    totalAtendimentos, concluidos, canceladosConsulta, descartados, cancelados, finalizados,
+    consultasAgendadas, particulares, receitaRealizada, taxaCancelamento,
+    mediaEsperaMin, contatosTotais, taxaConversaoFunil, agendadosFuturos, previsaoFaturacao,
+    emAgendamento, finalizadosViaConsulta, finalizadosDireto,
+    terceiros, titulares, totalDemografico,
+    uniOlimpia, uniTatuape, totalUni,
+    conveniosCount, totalPag,
+    rankingAtendentes, maxAtendimentos,
+    rankingLoyalty,
+    motivosCancelamento, motivosDescarte,
+    evolucaoDiaria, maxEvol,
+  } = useMemo(() => {
+    const totalAtendimentos = agendamentos.length;
+    const concluidos = agendamentos.filter(a => ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento)).length;
+    const canceladosConsulta = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta).length;
+    const descartados = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && !a.data_consulta).length;
+    const cancelados = canceladosConsulta;
+    const finalizados = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length;
+    const consultasAgendadas = agendamentos.filter(a =>
+      ['AGENDADO', 'FINALIZADO'].includes(a.status_atendimento) && a.data_consulta && a.pagamento
+    );
+    const particulares = consultasAgendadas.filter(a =>
+      a.pagamento!.toLowerCase().includes('particular') || a.pagamento!.toLowerCase().includes('pix')
+    ).length;
+    const receitaRealizada = particulares * 600;
+    const taxaCancelamento = totalAtendimentos > 0 ? Math.round((cancelados / totalAtendimentos) * 100) : 0;
 
-  let totalEsperaMs = 0, itensComEspera = 0;
-  agendamentos.forEach(a => {
-    if (a.data_atendimento && a.data_criacao) {
-      const espera = new Date(a.data_atendimento).getTime() - new Date(a.data_criacao).getTime();
-      if (espera > 0 && espera < 24 * 60 * 60 * 1000) { totalEsperaMs += espera; itensComEspera++; }
-    }
-  });
-  const mediaEsperaMin = itensComEspera > 0 ? Math.round((totalEsperaMs / itensComEspera) / 60000) : 0;
+    let totalEsperaMs = 0, itensComEspera = 0;
+    agendamentos.forEach(a => {
+      if (a.data_atendimento && a.data_criacao) {
+        const espera = new Date(a.data_atendimento).getTime() - new Date(a.data_criacao).getTime();
+        if (espera > 0 && espera < 24 * 60 * 60 * 1000) { totalEsperaMs += espera; itensComEspera++; }
+      }
+    });
+    const mediaEsperaMin = itensComEspera > 0 ? Math.round((totalEsperaMs / itensComEspera) / 60000) : 0;
 
-  const contatosTotais = totalAtendimentos + leads.length;
-  const taxaConversaoFunil = contatosTotais > 0 ? Math.round((concluidos / contatosTotais) * 100) : 0;
-  const agendadosFuturos = agendamentos.filter(a => a.status_atendimento === 'AGENDADO' && a.data_consulta && a.pagamento?.toLowerCase().includes('particular')).length;
-  const previsaoFaturacao = agendadosFuturos * 600;
+    const contatosTotais = totalAtendimentos + leads.length;
+    const taxaConversaoFunil = contatosTotais > 0 ? Math.round((concluidos / contatosTotais) * 100) : 0;
+    const agendadosFuturos = agendamentos.filter(a => a.status_atendimento === 'AGENDADO' && a.data_consulta && a.pagamento?.toLowerCase().includes('particular')).length;
+    const previsaoFaturacao = agendadosFuturos * 600;
 
+    const emAgendamento = agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length;
+    const finalizadosViaConsulta = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && a.data_consulta).length;
+    const finalizadosDireto = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && !a.data_consulta).length;
 
-  // Separação dos dois caminhos de atendimento
-  const emAgendamento = agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length;
-  const finalizadosViaConsulta = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && a.data_consulta).length;
-  const finalizadosDireto = agendamentos.filter(a => a.status_atendimento === 'FINALIZADO' && !a.data_consulta).length;
+    const terceiros = agendamentos.filter(a => a.para_terceiro === true && a.data_consulta).length;
+    const titulares = agendamentos.filter(a => a.para_terceiro === false && a.data_consulta).length;
+    const totalDemografico = terceiros + titulares || 1;
 
-  const terceiros = agendamentos.filter(a => a.para_terceiro === true && a.data_consulta).length;
-  const titulares = agendamentos.filter(a => a.para_terceiro === false && a.data_consulta).length;
-  const totalDemografico = terceiros + titulares || 1;
+    const uniOlimpia = agendamentos.filter(a => a.unidade?.toLowerCase().includes('olimpia') || a.unidade?.toLowerCase().includes('olímpia')).length;
+    const uniTatuape = agendamentos.filter(a => a.unidade?.toLowerCase().includes('tatuap')).length;
+    const totalUni = uniOlimpia + uniTatuape || 1;
 
-  const uniOlimpia = agendamentos.filter(a => a.unidade?.toLowerCase().includes('olimpia') || a.unidade?.toLowerCase().includes('olímpia')).length;
-  const uniTatuape = agendamentos.filter(a => a.unidade?.toLowerCase().includes('tatuap')).length;
-  const totalUni = uniOlimpia + uniTatuape || 1;
+    const conveniosCount = consultasAgendadas.filter(a =>
+      !a.pagamento!.toLowerCase().includes('particular') && !a.pagamento!.toLowerCase().includes('pix')
+    ).length;
+    const totalPag = consultasAgendadas.length || 1;
 
-  const conveniosCount = consultasAgendadas.filter(a =>
-    !a.pagamento!.toLowerCase().includes('particular') && !a.pagamento!.toLowerCase().includes('pix')
-  ).length;
-  const totalPag = consultasAgendadas.length || 1;
+    const atendentes: Record<string, number> = {};
+    const ATENDENTES_EXCLUIR = ['ia', 'bot', 'robô', 'robo'];
+    agendamentos.forEach(a => {
+      if (a.atendente_nome && a.status_atendimento !== 'PENDENTE' && !ATENDENTES_EXCLUIR.includes(a.atendente_nome.toLowerCase())) {
+        atendentes[a.atendente_nome] = (atendentes[a.atendente_nome] || 0) + 1;
+      }
+    });
+    const rankingAtendentes = Object.entries(atendentes).sort((a, b) => b[1] - a[1]);
+    const maxAtendimentos = rankingAtendentes[0]?.[1] || 1;
 
-  const atendentes: Record<string, number> = {};
-  const ATENDENTES_EXCLUIR = ['ia', 'bot', 'robô', 'robo'];
-  agendamentos.forEach(a => {
-    if (a.atendente_nome && a.status_atendimento !== 'PENDENTE' && !ATENDENTES_EXCLUIR.includes(a.atendente_nome.toLowerCase())) {
-      atendentes[a.atendente_nome] = (atendentes[a.atendente_nome] || 0) + 1;
-    }
-  });
-  const rankingAtendentes = Object.entries(atendentes).sort((a, b) => b[1] - a[1]);
-  const maxAtendimentos = rankingAtendentes[0]?.[1] || 1;
+    const medicosData: Record<string, { total: number; retornos: number; novos: number }> = {};
+    agendamentos.forEach(a => {
+      const med = a.medico_final || a.nome_medico;
+      if (med && !['indiferente', 'qualquer', 'a confirmar'].includes(med.toLowerCase())) {
+        if (!medicosData[med]) medicosData[med] = { total: 0, retornos: 0, novos: 0 };
+        medicosData[med].total++;
+        if (a.tipo_consulta?.toLowerCase() === 'retorno') medicosData[med].retornos++;
+        else medicosData[med].novos++;
+      }
+    });
+    const rankingLoyalty = Object.entries(medicosData).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
+    const motivosCancelamento = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta && a.observacoes).slice(0, 4);
+    const motivosDescarte = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && !a.data_consulta && a.observacoes).slice(0, 4);
 
-  const medicosData: Record<string, { total: number; retornos: number; novos: number }> = {};
-  agendamentos.forEach(a => {
-    const med = a.medico_final || a.nome_medico;
-    if (med && !['indiferente', 'qualquer', 'a confirmar'].includes(med.toLowerCase())) {
-      if (!medicosData[med]) medicosData[med] = { total: 0, retornos: 0, novos: 0 };
-      medicosData[med].total++;
-      if (a.tipo_consulta?.toLowerCase() === 'retorno') medicosData[med].retornos++;
-      else medicosData[med].novos++;
-    }
-  });
-  const rankingLoyalty = Object.entries(medicosData).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
-  const motivosCancelamento = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && a.data_consulta && a.observacoes).slice(0, 4);
-  const motivosDescarte = agendamentos.filter(a => a.status_atendimento === 'CANCELADO' && !a.data_consulta && a.observacoes).slice(0, 4);
+    const hoje = new Date();
+    const toLocalDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const evolucaoDiaria = Array.from({ length: 14 }, (_, i) => {
+      const d = new Date(hoje); d.setDate(hoje.getDate() - (13 - i));
+      const ds = toLocalDateStr(d);
+      const qtd = agendamentos.filter(a => {
+        if (!a.data_criacao) return false;
+        return toLocalDateStr(new Date(a.data_criacao)) === ds;
+      }).length;
+      return { dia: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), qtd };
+    });
+    const maxEvol = Math.max(...evolucaoDiaria.map(e => e.qtd), 1);
 
-  const hoje = new Date();
-  const toLocalDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  const evolucaoDiaria = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(hoje); d.setDate(hoje.getDate() - (13 - i));
-    const ds = toLocalDateStr(d);
-    const qtd = agendamentos.filter(a => {
-      if (!a.data_criacao) return false;
-      return toLocalDateStr(new Date(a.data_criacao)) === ds;
-    }).length;
-    return { dia: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), qtd };
-  });
-  const maxEvol = Math.max(...evolucaoDiaria.map(e => e.qtd), 1);
+    return {
+      totalAtendimentos, concluidos, canceladosConsulta, descartados, cancelados, finalizados,
+      consultasAgendadas, particulares, receitaRealizada, taxaCancelamento,
+      mediaEsperaMin, contatosTotais, taxaConversaoFunil, agendadosFuturos, previsaoFaturacao,
+      emAgendamento, finalizadosViaConsulta, finalizadosDireto,
+      terceiros, titulares, totalDemografico,
+      uniOlimpia, uniTatuape, totalUni,
+      conveniosCount, totalPag,
+      rankingAtendentes, maxAtendimentos,
+      rankingLoyalty,
+      motivosCancelamento, motivosDescarte,
+      evolucaoDiaria, maxEvol,
+    };
+  }, [agendamentos, leads]);
 
 
   return (

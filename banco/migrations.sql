@@ -117,6 +117,9 @@ CREATE INDEX IF NOT EXISTS idx_chat_session           ON chat_messages (session_
 CREATE INDEX IF NOT EXISTS idx_chat_created           ON chat_messages (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_auditoria_usuario      ON auditoria_log (usuario_id);
 CREATE INDEX IF NOT EXISTS idx_auditoria_criacao      ON auditoria_log (criado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_contatos_ultima_mensagem ON contatos_whatsapp (ultima_mensagem DESC);
+CREATE INDEX IF NOT EXISTS idx_contatos_status_ultima   ON contatos_whatsapp (status_robo, ultima_mensagem DESC);
+CREATE INDEX IF NOT EXISTS idx_agendamentos_nome_medico ON agendamentos (nome_medico);
 
 -- ─── Usuário admin inicial ───────────────────────────────────
 -- Senha padrão: Admin@123 (TROQUE IMEDIATAMENTE após o primeiro login)

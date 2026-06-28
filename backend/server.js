@@ -181,6 +181,7 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   port:     parseInt(process.env.DB_PORT || '5432', 10),
   // Pool ajustado para produção
+  min: 3,
   max: 20,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
@@ -208,6 +209,9 @@ const criarIndices = async () => {
     `CREATE INDEX IF NOT EXISTS idx_chat_created            ON chat_messages (created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_auditoria_usuario       ON auditoria_log (usuario_id)`,
     `CREATE INDEX IF NOT EXISTS idx_auditoria_criacao       ON auditoria_log (criado_em DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_contatos_ultima_mensagem ON contatos_whatsapp (ultima_mensagem DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_contatos_status_ultima   ON contatos_whatsapp (status_robo, ultima_mensagem DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_agendamentos_nome_medico ON agendamentos (nome_medico)`,
   ];
   for (const sql of indices) {
     try { await pool.query(sql); }
@@ -869,6 +873,9 @@ app.get('/api/agendamentos', verificarToken, async (req, res) => {
 // LEADS
 // ============================================================
 app.get('/api/leads', verificarToken, async (req, res) => {
+  const cacheKey = 'leads:lista';
+  const cached = getCache(cacheKey);
+  if (cached !== null) return res.json(cached);
   try {
     const { rows } = await pool.query(`
       SELECT
@@ -899,6 +906,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
         AND c.status_robo != 'Bloqueado'
       ORDER BY c.ultima_mensagem DESC
     `);
+    setCache(cacheKey, rows, 2 * 60_000);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao buscar leads.' });
@@ -1055,7 +1063,7 @@ app.delete('/api/modelos/:id', verificarToken, async (req, res) => {
 app.put('/api/status', verificarToken, async (req, res) => {
   const { id, status, atendente, observacoes, notificar, data_atendimento, data_cancelamento } = req.body;
 
-  const statusValidos = ['PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO', 'CANCELADO'];
+  const statusValidos = ['PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO', 'FINALIZADO', 'CANCELADO'];
   if (!statusValidos.includes(status)) {
     return res.status(400).json({ erro: 'Status inválido.' });
   }
@@ -1425,6 +1433,7 @@ app.delete('/api/leads/:id', verificarToken, async (req, res) => {
   }
   try {
     await pool.query('DELETE FROM contatos_whatsapp WHERE id = $1', [req.params.id]);
+    clearCache('leads:');
     res.json({ sucesso: true });
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao descartar lead.' });
@@ -1457,6 +1466,7 @@ app.post('/api/leads/:id/converter', verificarToken, async (req, res) => {
       ip: req.ip
     });
 
+    clearCache('leads:');
     res.json({ sucesso: true });
   } catch (err) {
     logger.error('Erro ao converter lead', { error: err.message });
@@ -1606,6 +1616,9 @@ app.get('/api/relatorios/resumo', verificarToken, async (req, res) => {
   }
 
   const { data_inicio, data_fim } = req.query;
+  const cacheKey = `relatorios:resumo:${data_inicio || ''}:${data_fim || ''}`;
+  const cached = getCache(cacheKey);
+  if (cached !== null) return res.json(cached);
 
   try {
     const params = [];
@@ -1627,13 +1640,15 @@ app.get('/api/relatorios/resumo', verificarToken, async (req, res) => {
       pool.query(`SELECT COALESCE(medico_final, nome_medico) as medico, COUNT(*) as qtd FROM agendamentos a ${medicoWhere} GROUP BY 1 ORDER BY 2 DESC LIMIT 10`, params),
     ]);
 
-    res.json({
+    const resultado = {
       total: parseInt(totalRes.rows[0].total),
       porStatus: statusRes.rows,
       porUnidade: unidadeRes.rows,
       porPagamento: pagamentoRes.rows,
       topMedicos: medicoRes.rows,
-    });
+    };
+    setCache(cacheKey, resultado, 5 * 60_000);
+    res.json(resultado);
   } catch (err) {
     logger.error('Erro nos relatórios', { error: err.message });
     res.status(500).json({ erro: 'Erro ao gerar relatórios.' });
@@ -1643,6 +1658,9 @@ app.get('/api/relatorios/resumo', verificarToken, async (req, res) => {
 app.get('/api/relatorios/evolucao-diaria', verificarToken, async (req, res) => {
   const diasRaw = parseInt(req.query.dias || '30', 10);
   const dias = isNaN(diasRaw) ? 30 : Math.min(90, Math.max(1, diasRaw));
+  const cacheKey = `relatorios:evolucao:${dias}`;
+  const cached = getCache(cacheKey);
+  if (cached !== null) return res.json(cached);
   try {
     const { rows } = await pool.query(`
       SELECT
@@ -1656,6 +1674,7 @@ app.get('/api/relatorios/evolucao-diaria', verificarToken, async (req, res) => {
       GROUP BY DATE(data_criacao)
       ORDER BY dia ASC
     `, [dias]);
+    setCache(cacheKey, rows, 10 * 60_000);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ erro: 'Erro na evolução diária.' });

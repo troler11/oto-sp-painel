@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { useProfilePic } from '../hooks/useProfilePic';
 import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History, Check, X as XIcon } from 'lucide-react';
 import type { Agendamento } from '../types';
@@ -17,29 +17,46 @@ interface Props {
   onRenomear: (id: number, novoNome: string) => void;
 }
 
+// Ticker global compartilhado — um único setInterval para todos os cards PENDENTE
+const _tickListeners = new Set<() => void>();
+let _tickInterval: ReturnType<typeof setInterval> | null = null;
+
+function _subscribeToTick(fn: () => void): () => void {
+  _tickListeners.add(fn);
+  if (!_tickInterval) {
+    _tickInterval = setInterval(() => _tickListeners.forEach(f => f()), 1000);
+  }
+  return () => {
+    _tickListeners.delete(fn);
+    if (_tickListeners.size === 0 && _tickInterval) {
+      clearInterval(_tickInterval);
+      _tickInterval = null;
+    }
+  };
+}
+
 function useTimerVivo(dataCriacao: string, ativo: boolean) {
   const [tempo, setTempo] = useState('');
   useEffect(() => {
     if (!ativo) return;
-    const atualizar = () => {
+    const calcular = () => {
       const diff = Math.floor((Date.now() - new Date(dataCriacao).getTime()) / 1000);
       if (diff < 60) setTempo(`${diff}s`);
       else if (diff < 3600) setTempo(`${Math.floor(diff / 60)}min ${diff % 60}s`);
       else setTempo(`${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}min`);
     };
-    atualizar();
-    const t = setInterval(atualizar, 1000);
-    return () => clearInterval(t);
+    calcular();
+    return _subscribeToTick(calcular);
   }, [dataCriacao, ativo]);
   return tempo;
 }
 
-export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear }: Props) {
+const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear }: Props) {
   const { sessao } = useApp();
   const [editandoNome, setEditandoNome] = useState(false);
   const [nomeEditado, setNomeEditado] = useState(item.nome_paciente);
   const inputNomeRef = useRef<HTMLInputElement>(null);
-  const podeEditar = ['AGENDADO', 'EM ATENDIMENTO'].includes(item.status_atendimento) || sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
+  const podeEditar = ['AGENDADO', 'CONFIRMADO', 'EM ATENDIMENTO'].includes(item.status_atendimento) || sessao?.user.nome === item.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const MEDICO_IGNORAR = ['qualquer', 'indiferente', 'a confirmar'];
   const medicoRaw = (['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.medico_final) ? item.medico_final : (item.nome_medico || '');
   const medicoExibir = MEDICO_IGNORAR.includes(medicoRaw.toLowerCase()) ? '' : medicoRaw;
@@ -59,6 +76,7 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
     ? urgencia === 'alta' ? 'bg-gradient-to-b from-red-500 to-orange-500' : urgencia === 'media' ? 'bg-amber-400' : 'bg-amber-300'
     : item.status_atendimento === 'EM ATENDIMENTO' ? 'bg-gradient-to-b from-amber-400 to-orange-400 animate-pulse'
     : item.status_atendimento === 'AGENDADO' ? 'bg-gradient-to-b from-emerald-500 to-teal-500'
+    : item.status_atendimento === 'CONFIRMADO' ? 'bg-gradient-to-b from-violet-500 to-violet-600'
     : item.status_atendimento === 'FINALIZADO' ? 'bg-indigo-500'
     : isDescartado ? 'bg-slate-400' : 'bg-red-400';
 
@@ -146,12 +164,12 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
         </div>
       )}
 
-      {['AGENDADO', 'FINALIZADO'].includes(item.status_atendimento) && item.data_consulta && (
-        <div className={`border rounded-xl p-3 mb-4 text-center ${item.status_atendimento === 'FINALIZADO' ? 'bg-indigo-50 border-indigo-100' : 'bg-emerald-50 border-emerald-100'}`}>
-          <p className={`text-[9px] font-extrabold uppercase tracking-widest mb-1 ${item.status_atendimento === 'FINALIZADO' ? 'text-indigo-500' : 'text-emerald-500'}`}>
-            {item.status_atendimento === 'FINALIZADO' ? '✓ Realizada' : '✓ Confirmada'}
+      {['AGENDADO', 'CONFIRMADO', 'FINALIZADO'].includes(item.status_atendimento) && item.data_consulta && (
+        <div className={`border rounded-xl p-3 mb-4 text-center ${item.status_atendimento === 'FINALIZADO' ? 'bg-indigo-50 border-indigo-100' : item.status_atendimento === 'CONFIRMADO' ? 'bg-violet-50 border-violet-100' : 'bg-emerald-50 border-emerald-100'}`}>
+          <p className={`text-[9px] font-extrabold uppercase tracking-widest mb-1 ${item.status_atendimento === 'FINALIZADO' ? 'text-indigo-500' : item.status_atendimento === 'CONFIRMADO' ? 'text-violet-500' : 'text-emerald-500'}`}>
+            {item.status_atendimento === 'FINALIZADO' ? '✓ Realizada' : item.status_atendimento === 'CONFIRMADO' ? '✓ Confirmado pelo Paciente' : '✓ Confirmada'}
           </p>
-          <p className={`text-sm font-extrabold flex items-center justify-center gap-1.5 ${item.status_atendimento === 'FINALIZADO' ? 'text-indigo-900' : 'text-emerald-900'}`}>
+          <p className={`text-sm font-extrabold flex items-center justify-center gap-1.5 ${item.status_atendimento === 'FINALIZADO' ? 'text-indigo-900' : item.status_atendimento === 'CONFIRMADO' ? 'text-violet-900' : 'text-emerald-900'}`}>
             <CalendarDays size={14} /> {formatarDataBr(item.data_consulta)} · {formatarHoraBr(item.hora_consulta)}
           </p>
         </div>
@@ -228,6 +246,21 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
             </button>
           </div>
         )}
+        {item.status_atendimento === 'CONFIRMADO' && (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <button onClick={() => onChat(item)} className="p-2.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-xl transition-colors border border-violet-100"><MessageSquare size={17} /></button>
+              <button disabled={!podeEditar} onClick={() => podeEditar && onCancelar(item)}
+                className={`flex-1 py-2.5 rounded-xl text-xs font-bold ${podeEditar ? 'bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors' : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                Cancelar
+              </button>
+            </div>
+            <button disabled={!podeEditar} onClick={() => podeEditar && onFinalizar(item.id)}
+              className={`w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${podeEditar ? 'bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+              <CheckCircle2 size={17} /> Concluir Consulta
+            </button>
+          </div>
+        )}
         {item.status_atendimento === 'FINALIZADO' && (
           <button onClick={() => onChat(item)} className="w-full bg-slate-100 text-slate-600 hover:bg-slate-200 py-3 rounded-xl text-sm font-bold flex justify-center gap-2 transition-colors">
             <MessageSquare size={17} /> Enviar Mensagem
@@ -241,4 +274,6 @@ export default function PatientCard({ item, onChat, onAgendar, onCancelar, onAss
       </div>
     </div>
   );
-}
+});
+
+export default PatientCard;
