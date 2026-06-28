@@ -522,6 +522,87 @@ app.post('/api/webhook/receber-robo', async (req, res) => {
 });
 
 // ============================================================
+// WEBHOOK — SALVA COMO MENSAGEM ENVIADA PELO STAFF/BOT (lado direito do chat)
+// Usar quando o N8N envia uma mensagem em nome do bot e quer que apareça
+// no chat como se fosse o atendente/sistema enviando.
+// ============================================================
+app.post('/api/webhook/receber-enviado', async (req, res) => {
+  const tokenFornecido = req.headers['x-webhook-secret'];
+
+  if (!WEBHOOK_SECRET) {
+    logger.error('WEBHOOK_SECRET não configurado');
+    return res.status(500).json({ erro: 'Erro de configuração.' });
+  }
+
+  const secretValido = (() => {
+    if (!tokenFornecido) return false;
+    try {
+      const a = Buffer.from(WEBHOOK_SECRET);
+      const b = Buffer.from(tokenFornecido);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch { return false; }
+  })();
+
+  if (!secretValido) {
+    logger.warn('Bloqueio no Webhook Enviado. Token inválido.', { ip: req.ip });
+    return res.status(401).json({ erro: 'Não autorizado.' });
+  }
+
+  try {
+    const body = req.body;
+    let telefoneRaw = '', texto = '';
+    let midiaMimetype = null, midiaBase64 = null;
+
+    // Formato WAHA nativo (fromMe=true — mensagem enviada pelo sistema)
+    if (body.event === 'message' && body.payload) {
+      telefoneRaw = body.payload.to || body.payload.from;
+      texto = body.payload.body || '';
+      if (body.payload.hasMedia && body.payload.media?.data) {
+        midiaMimetype = body.payload.media.mimetype || 'application/octet-stream';
+        midiaBase64 = body.payload.media.data;
+      }
+    } else if (body.data?.message) {
+      telefoneRaw = body.data.key?.remoteJid;
+      texto = body.data.message?.conversation || body.data.message?.extendedTextMessage?.text || '';
+    } else if (body.telefone && body.texto) {
+      telefoneRaw = body.telefone;
+      texto = body.texto;
+    }
+
+    if (!telefoneRaw || (!texto && !midiaBase64)) return res.json({ status: 'Ignorado' });
+
+    const telefoneLimpo = telefoneRaw.match(/^\d+/)?.[0] || '';
+
+    let midia_id = null;
+    if (midiaBase64 && midiaMimetype) {
+      const midiaRes = await pool.query(
+        'INSERT INTO mensagens_midia (mimetype, conteudo_base64) VALUES ($1, $2) RETURNING id',
+        [midiaMimetype, midiaBase64]
+      );
+      midia_id = midiaRes.rows[0].id;
+    }
+
+    // type: 'ai' → aparece no lado direito do chat (como staff/bot)
+    const msgData = { type: 'ai', content: texto || '', additional_kwargs: { sender: 'Bot', ...(midia_id ? { midia_id } : {}) } };
+    await pool.query(
+      'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+      [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+    );
+    await pool.query(
+      'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
+      [telefoneLimpo]
+    );
+
+    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.error('Erro no Webhook Enviado', { error: err.message });
+    res.status(500).json({ erro: 'Erro interno' });
+  }
+});
+
+// ============================================================
 // AUTH: LOGIN + REFRESH TOKEN
 // ============================================================
 app.get('/api/health', (req, res) => {
