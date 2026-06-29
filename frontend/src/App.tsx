@@ -357,7 +357,7 @@ export default function App() {
     const ag = paciente as Agendamento;
     const isAdminOrManager = sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
     const isConcluido = ['FINALIZADO', 'CANCELADO'].includes(ag.status_atendimento);
-    const bloquearEnvio = isLead ? false : (!isConcluido && Boolean(ag.atendente_nome) && ag.atendente_nome !== sessao?.user.nome && !isAdminOrManager);
+    const bloquearEnvio = isLead ? false : isConcluido;
     setPacienteAtivoChat({ telefone: tel, nome_paciente: isLead ? (paciente as Lead).nome_titular : ag.nome_paciente, bloquearEnvio });
     setChatAberto(true);
     setTelefonesComMsgNova(prev => { const s = new Set(prev); s.delete(tel); return s; });
