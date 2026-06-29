@@ -246,6 +246,18 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessao]);
 
+  // Poll rápido de leads quando na aba TRIAGEM (sem cache no backend, atualiza em ~10s)
+  useEffect(() => {
+    if (!sessao || filtro !== 'TRIAGEM') return;
+    const pollLeads = async () => {
+      const res = await fetchSeguro(`${API_URL}/leads`);
+      if (res.ok && res.headers.get('content-type')?.includes('application/json'))
+        setLeads(await res.json());
+    };
+    const id = setInterval(pollLeads, 10000);
+    return () => clearInterval(id);
+  }, [sessao, filtro]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

@@ -1039,9 +1039,6 @@ app.get('/api/agendamentos', verificarToken, async (req, res) => {
 // LEADS
 // ============================================================
 app.get('/api/leads', verificarToken, async (req, res) => {
-  const cacheKey = 'leads:lista';
-  const cached = getCache(cacheKey);
-  if (cached !== null) return res.json(cached);
   try {
     const { rows } = await pool.query(`
       SELECT
@@ -1072,7 +1069,6 @@ app.get('/api/leads', verificarToken, async (req, res) => {
         AND c.status_robo != 'Bloqueado'
       ORDER BY c.ultima_mensagem DESC
     `);
-    setCache(cacheKey, rows, 2 * 60_000);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao buscar leads.' });
