@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS contatos_whatsapp (
   data_cadastro   TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Colunas adicionadas via ALTER TABLE (não presentes no CREATE acima):
+-- ALTER TABLE contatos_whatsapp ADD COLUMN IF NOT EXISTS nome_atendimento VARCHAR(255);
+-- ALTER TABLE contatos_whatsapp ADD COLUMN IF NOT EXISTS sessao_intencao VARCHAR(100);
+-- ALTER TABLE contatos_whatsapp ADD COLUMN IF NOT EXISTS classificacao_itsaude VARCHAR(30);
+
 -- ─── Agendamentos / Kanban ───────────────────────────────────
 CREATE TABLE IF NOT EXISTS agendamentos (
   id                  SERIAL PRIMARY KEY,

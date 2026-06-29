@@ -1046,7 +1046,7 @@ app.get('/api/leads', verificarToken, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT
         c.id, c.telefone, c.nome_titular, c.nome_atendimento, c.cpf_titular, c.status_robo,
-        c.ultima_mensagem, c.data_cadastro, c.sessao_intencao
+        c.ultima_mensagem, c.data_cadastro, c.sessao_intencao, c.classificacao_itsaude
       FROM contatos_whatsapp c
       WHERE
         NOT EXISTS (
@@ -1104,6 +1104,7 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
 
     if (!pResp.ok) {
       const r = { classificacao: 'novo_lead' };
+      await pool.query('UPDATE contatos_whatsapp SET classificacao_itsaude = $1 WHERE id = $2', [r.classificacao, req.params.id]);
       setCache(cacheKey, r, 30 * 60_000);
       return res.json(r);
     }
@@ -1113,6 +1114,7 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
 
     if (!paciente) {
       const r = { classificacao: 'novo_lead' };
+      await pool.query('UPDATE contatos_whatsapp SET classificacao_itsaude = $1 WHERE id = $2', [r.classificacao, req.params.id]);
       setCache(cacheKey, r, 30 * 60_000);
       return res.json(r);
     }
@@ -1144,6 +1146,7 @@ app.get('/api/leads/:id/classificar-itsaude', verificarToken, async (req, res) =
       ? { classificacao: 'recorrente', nome_itsaude: paciente.name, ...(totalConsultas > 0 && { total_consultas: totalConsultas }) }
       : { classificacao: 'novo_paciente', nome_itsaude: paciente.name };
 
+    await pool.query('UPDATE contatos_whatsapp SET classificacao_itsaude = $1 WHERE id = $2', [resultado.classificacao, req.params.id]);
     setCache(cacheKey, resultado, 30 * 60_000);
     res.json(resultado);
   } catch (err) {
@@ -1687,7 +1690,7 @@ app.get('/api/contatos', verificarToken, async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, telefone, nome_titular, nome_atendimento, cpf_titular,
-             status_robo, ultima_mensagem, data_cadastro, sessao_intencao
+             status_robo, ultima_mensagem, data_cadastro, sessao_intencao, classificacao_itsaude
       FROM contatos_whatsapp
       ORDER BY ultima_mensagem DESC
       LIMIT 500

@@ -19,6 +19,7 @@ export interface Agendamento {
 export interface Lead {
   id: number; telefone: string; nome_titular: string; nome_atendimento?: string; cpf_titular?: string;
   status_robo: string; ultima_mensagem: string; data_cadastro: string; sessao_intencao?: string;
+  classificacao_itsaude?: 'novo_lead' | 'novo_paciente' | 'recorrente' | null;
 }
 export type Contato = Lead;
 export interface Notificacao { id: number; texto: string; tipo: 'info' | 'sucesso' | 'aviso'; lida: boolean; hora: string; }

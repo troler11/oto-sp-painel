@@ -165,6 +165,7 @@ export default function App() {
   // ── Socket ────────────────────────────────────────────────────
   const socketRef = useRef<Socket | null>(null);
   const pacienteAtivoChatRef = useRef<PacienteChat | null>(null);
+  const classificacoesRefrescadasRef = useRef<Set<number>>(new Set());
 
   // ── Effects ───────────────────────────────────────────────────
   useEffect(() => { document.title = 'OtoFlow CRM | Gestão de Atendimentos'; }, []);
@@ -208,9 +209,14 @@ export default function App() {
 
   useEffect(() => {
     if (filtro !== 'LEADS' || contatos.length === 0) return;
-    const novosIds = contatos.map(c => c.id).filter(id => !(id in classificacoesLeads));
-    if (novosIds.length === 0) return;
-    prefetchClassificacoes(novosIds).then(novos =>
+    // Só re-busca contatos que podem mudar (não recorrente) e ainda não foram refrescados nesta sessão
+    const idsParaRefrescar = contatos
+      .filter(c => c.classificacao_itsaude !== 'recorrente'
+                && !classificacoesRefrescadasRef.current.has(c.id))
+      .map(c => c.id);
+    if (idsParaRefrescar.length === 0) return;
+    idsParaRefrescar.forEach(id => classificacoesRefrescadasRef.current.add(id));
+    prefetchClassificacoes(idsParaRefrescar).then(novos =>
       setClassificacoesLeads(prev => ({ ...prev, ...novos }))
     );
   }, [filtro, contatos]);
@@ -603,8 +609,8 @@ export default function App() {
   const listaLeads = useMemo(() => contatos
     .filter(c => c.status_robo !== 'Bloqueado')
     .filter(c => {
-      const cl = classificacoesLeads[c.id];
-      return cl === undefined || cl === 'novo_lead' || cl === 'novo_paciente';
+      const cl = classificacoesLeads[c.id] ?? c.classificacao_itsaude;
+      return !cl || cl === 'novo_lead' || cl === 'novo_paciente';
     })
     .filter(c => {
       if (!searchTerm) return true;
