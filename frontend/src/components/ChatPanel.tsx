@@ -91,7 +91,7 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
             ? convMatch[1].trim()
             : msg.texto
                 .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
-                .replace(/\[[A-Z][A-Z0-9_ ]*:[^\]]*\]/g, '')
+                .replace(/\[[^\]:]+:[^\]]*\]/g, '')
                 .replace(/\[[A-Z][A-Z0-9_]+\]/g, '')
                 .split('$$$')[0].trim();
           if (!textoFinal) return null;
