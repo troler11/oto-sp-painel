@@ -65,16 +65,20 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
         {mensagens.map((msg, idx) => {
           // Padrões que extraem só o valor e ignoram o resto da mensagem
           const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
-          const aceitoMatch = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
-          const inicioColetaMatch = !msgOriginalMatch && !aceitoMatch && msg.texto.match(/\[INICIO COLETA:.*?paciente escolheu\s+"([^"]+)"/s);
-          const responderExatamenteMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
-          const convMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch && !responderExatamenteMatch && msg.texto.match(/conv="([^"]+)"/);
+          const aceitoRaw = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
+          // Se o conteúdo do ACEITO tiver conv=, extrai só o valor do conv
+          const aceitoMatch = aceitoRaw
+            ? { val: aceitoRaw[1].match(/conv="([^"]+)"/) ? aceitoRaw[1].match(/conv="([^"]+)"/)![1] : aceitoRaw[1].trim() }
+            : null;
+          const inicioColetaMatch = !msgOriginalMatch && !aceitoRaw && msg.texto.match(/\[INICIO COLETA:.*?paciente escolheu\s+"([^"]+)"/s);
+          const responderExatamenteMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
+          const convMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch && !responderExatamenteMatch && msg.texto.match(/conv="([^"]+)"/);
 
           // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
           const textoFinal = msgOriginalMatch
             ? msgOriginalMatch[1].trim()
             : aceitoMatch
-            ? aceitoMatch[1].trim()
+            ? aceitoMatch.val
             : inicioColetaMatch
             ? inicioColetaMatch[1].trim()
             : responderExatamenteMatch
