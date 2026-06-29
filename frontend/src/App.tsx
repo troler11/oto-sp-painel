@@ -87,6 +87,7 @@ export default function App() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [contatos, setContatos] = useState<Contato[]>([]);
+  const [telefonesComMsgNova, setTelefonesComMsgNova] = useState<Set<string>>(new Set());
   const [searchContatos, setSearchContatos] = useState('');
   const [novoContatoForm, setNovoContatoForm] = useState<{ aberto: boolean; telefone: string; nome: string }>({ aberto: false, telefone: '', nome: '' });
   const [editandoContato, setEditandoContato] = useState<{ id: number; nome: string; telefone: string } | null>(null);
@@ -238,6 +239,7 @@ export default function App() {
         setMensagens(prev => [...prev, { texto: payload.texto, origem: payload.origem ?? 'paciente', data: new Date().toISOString() }]);
       } else {
         adicionarNotificacao(`Nova mensagem de ${payload.telefone}`, 'info');
+        setTelefonesComMsgNova(prev => new Set(prev).add(payload.telefone));
       }
     });
 
@@ -354,6 +356,7 @@ export default function App() {
     const bloquearEnvio = isLead ? false : (!isConcluido && Boolean(ag.atendente_nome) && ag.atendente_nome !== sessao?.user.nome && !isAdminOrManager);
     setPacienteAtivoChat({ telefone: tel, nome_paciente: isLead ? (paciente as Lead).nome_titular : ag.nome_paciente, bloquearEnvio });
     setChatAberto(true);
+    setTelefonesComMsgNova(prev => { const s = new Set(prev); s.delete(tel); return s; });
     try {
       const res = await fetchSeguro(`${API_URL}/chat/${tel}`);
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) setMensagens(await res.json());
@@ -812,7 +815,7 @@ export default function App() {
 
     return lista.map(item => (
       <SortableCard key={item.id} id={String(item.id)}>
-        <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} />
+        <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
       </SortableCard>
     ));
   };

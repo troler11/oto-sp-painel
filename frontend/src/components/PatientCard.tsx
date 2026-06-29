@@ -15,6 +15,7 @@ interface Props {
   onFinalizar: (id: number) => void;
   onTimeline: (item: Agendamento) => void;
   onRenomear: (id: number, novoNome: string) => void;
+  temMsgNova?: boolean;
 }
 
 // Ticker global compartilhado — um único setInterval para todos os cards PENDENTE
@@ -51,7 +52,7 @@ function useTimerVivo(dataCriacao: string, ativo: boolean) {
   return tempo;
 }
 
-const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear }: Props) {
+const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear, temMsgNova }: Props) {
   const { sessao } = useApp();
   const [editandoNome, setEditandoNome] = useState(false);
   const [nomeEditado, setNomeEditado] = useState(item.nome_paciente);
@@ -200,14 +201,14 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
       <div className="space-y-2 mt-auto">
         {item.status_atendimento === 'PENDENTE' && (
           <div className="flex gap-2">
-            <button onClick={() => onChat(item)} className="p-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"><MessageSquare size={17} /></button>
+            <div className="relative"><button onClick={() => onChat(item)} className="p-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"><MessageSquare size={17} /></button>{temMsgNova && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}</div>
             <button onClick={() => onAssumir(item.id)} className="flex-1 bg-gradient-to-r from-[#005088] to-[#003a66] hover:opacity-90 text-white py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all hover:shadow-[#005088]/30">Assumir Ficha</button>
           </div>
         )}
         {item.status_atendimento === 'EM ATENDIMENTO' && (
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <button onClick={() => onChat(item)} className="p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-xl transition-colors border border-amber-100"><MessageSquare size={17} /></button>
+              <div className="relative"><button onClick={() => onChat(item)} className="p-2.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-xl transition-colors border border-amber-100"><MessageSquare size={17} /></button>{temMsgNova && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}</div>
               <button disabled={!podeEditar} onClick={() => podeEditar && onAgendar(item)}
                 className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${podeEditar ? 'bg-gradient-to-r from-[#11caa0] to-[#0e9f7e] text-white shadow-sm hover:shadow-[#11caa0]/25' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
                 {podeEditar ? 'Agendar' : <><Lock size={13} /> Bloqueado</>}
@@ -230,7 +231,7 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
         {item.status_atendimento === 'AGENDADO' && (
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <button onClick={() => onChat(item)} className="p-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"><MessageSquare size={17} /></button>
+              <div className="relative"><button onClick={() => onChat(item)} className="p-2.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"><MessageSquare size={17} /></button>{temMsgNova && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}</div>
               <button disabled={!podeEditar} onClick={() => podeEditar && onAgendar(item, true)}
                 className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 ${podeEditar ? 'bg-white border border-blue-200 text-blue-600 hover:bg-blue-50' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
                 {podeEditar ? <><Edit2 size={13} /> Remarcar</> : <><Lock size={12} /> Bloqueado</>}
@@ -249,7 +250,7 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
         {item.status_atendimento === 'CONFIRMADO' && (
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-              <button onClick={() => onChat(item)} className="p-2.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-xl transition-colors border border-violet-100"><MessageSquare size={17} /></button>
+              <div className="relative"><button onClick={() => onChat(item)} className="p-2.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-xl transition-colors border border-violet-100"><MessageSquare size={17} /></button>{temMsgNova && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}</div>
               <button disabled={!podeEditar} onClick={() => podeEditar && onCancelar(item)}
                 className={`flex-1 py-2.5 rounded-xl text-xs font-bold ${podeEditar ? 'bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors' : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'}`}>
                 Cancelar
