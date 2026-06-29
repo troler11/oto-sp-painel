@@ -208,7 +208,11 @@ export default function App() {
 
   useEffect(() => {
     if (filtro !== 'LEADS' || contatos.length === 0) return;
-    prefetchClassificacoes(contatos.map(c => c.id)).then(setClassificacoesLeads);
+    const novosIds = contatos.map(c => c.id).filter(id => !(id in classificacoesLeads));
+    if (novosIds.length === 0) return;
+    prefetchClassificacoes(novosIds).then(novos =>
+      setClassificacoesLeads(prev => ({ ...prev, ...novos }))
+    );
   }, [filtro, contatos]);
 
   useEffect(() => {
