@@ -27,11 +27,13 @@ docker compose up --build   # Usa env_file: .env na raiz
 ### Monorepo sem workspace
 `backend/` e `frontend/` são projetos Node independentes. O Docker multi-stage compila o frontend e serve o `dist/` como arquivos estáticos pelo Express (`/app/public`). Em dev local, o Vite faz proxy de `/api` e `/socket.io` para `localhost:3000`.
 
+O build do frontend usa `manualChunks` no Vite: `vendor-react`, `vendor-calendar`, `vendor-dnd`. Modais são lazy-loaded via `React.lazy` + `Suspense` para reduzir o bundle inicial.
+
 ### Backend — arquivo único
 Todo o backend vive em `backend/server.js`. A ordem de leitura é:
 1. Configuração (helmet, CORS, rate limit, logger, cache)
 2. Variáveis de ambiente + validação obrigatória (`JWT_SECRET`, `REFRESH_SECRET`)
-3. Pool PostgreSQL + criação automática de tabelas extras (`auditoria_log`, `refresh_tokens`, `mensagens_midia`) e índices
+3. Pool PostgreSQL (`min: 3`) + criação automática de tabelas extras (`auditoria_log`, `refresh_tokens`, `mensagens_midia`) e índices
 4. Middleware `verificarToken` (lê cookie `token`)
 5. Rotas em ordem: webhook → auth → usuários → médicos → agendamentos → leads → contatos → modelos → chat → relatórios
 6. Servidor HTTP + Socket.io
@@ -45,8 +47,10 @@ Todo o backend vive em `backend/server.js`. A ordem de leitura é:
 ### Frontend — estado centralizado em App.tsx
 `App.tsx` é o único componente com estado global e lógica de negócio. Todos os componentes filhos recebem callbacks via props. O `AppContext` expõe apenas `sessao`, `fetchSeguro`, `adicionarNotificacao` e `setNotificacaoErro`.
 
+Callbacks são memoizados com `useCallback`. Valores derivados pesados (`contagens`, `filtrosAg`, `filtrosLeads`, `listaLeads`) são memoizados com `useMemo`. `PatientCard` é envolto em `React.memo`. O ticker de tempo vivo usa um singleton global (`_tickListeners`) em vez de um `setInterval` por card.
+
 ### Fluxo do Kanban
-Statuses: `PENDENTE → EM ATENDIMENTO → AGENDADO → FINALIZADO / CANCELADO`
+Statuses: `PENDENTE → EM ATENDIMENTO → AGENDADO → CONFIRMADO → FINALIZADO / CANCELADO`
 
 Existe um segundo caminho de finalização direta:
 `EM ATENDIMENTO → FINALIZADO` (botão "Finalizar Atendimento") — para dúvidas rápidas sem agendar consulta.
@@ -57,16 +61,29 @@ A distinção entre os dois caminhos é feita pelo campo `data_consulta`:
 
 Qualquer lógica que deva aplicar-se **apenas a consultas reais** deve incluir `&& a.data_consulta` no filtro. Isso inclui: Formas de Pagamento, Ranking de Médicos, campo de pagamento no card e no perfil do paciente.
 
+**CONFIRMADO** é um status entre AGENDADO e FINALIZADO (paciente confirmou presença). Visual: barra violeta (`from-violet-500 to-violet-600`), label `'✓ Confirmado pelo Paciente'`. Botões: Chat, Cancelar, Concluir Consulta. **Não dispara reset de `contatos_whatsapp`** — atendimento ainda está em curso.
+
+**PENDENTE** é ordenado do mais antigo para o mais novo (`data_criacao ASC`) — quem espera há mais tempo aparece primeiro.
+
 ### Socket.io
 Conexão iniciada em `useEffect` após login (`io({ withCredentials: true })`). O backend autentica o socket via middleware que lê o mesmo cookie `token`. Eventos: `agendamento:atualizado` e `mensagem:nova`.
 
 O handler `mensagem:nova` usa `pacienteAtivoChatRef` (não a variável de estado diretamente) para evitar closure stale — o `useEffect` do socket só roda uma vez ao logar. Além disso, existe um polling de fallback de 5s enquanto `chatAberto` for verdadeiro que busca **apenas mensagens novas** via `?desde=<timestamp>+1ms` (merge incremental — não refaz o histórico completo).
 
+O payload de `mensagem:nova` inclui `{ telefone, texto, origem? }`. O campo `origem` é passado pelo backend quando a mensagem não é do paciente (ex: `/receber-enviado` emite `origem: 'ia_ou_recepcao'`). O frontend usa `payload.origem ?? 'paciente'` — sem isso, mensagens do bot apareceriam no lado esquerdo até o chat ser reaberto.
+
 ### Tipos TypeScript
 Todas as interfaces estão em `frontend/src/types.ts`. Sempre importar como `import type { ... }` — o Vite com rolldown falha no build se usar import de valor para tipos.
 
 ### Cache in-memory (backend)
-Rotas `GET /api/medicos` (5min) e `GET /api/modelos` (2min) usam cache Map. Chamar `clearCache('medicos:')` ou `clearCache('modelos:')` após qualquer escrita nessas entidades.
+Rotas com cache Map:
+- `GET /api/medicos` — 5min, chave `medicos:*`
+- `GET /api/modelos` — 2min, chave `modelos:*`
+- `GET /api/leads` — 2min, chave `leads:lista`
+- `GET /api/relatorios/resumo` — 5min, chave `relatorios:resumo:${data_inicio}:${data_fim}`
+- `GET /api/relatorios/evolucao-diaria` — 10min, chave `relatorios:evolucao:${dias}`
+
+Chamar `clearCache('<prefixo>:')` após qualquer escrita nas entidades correspondentes. `GET /api/leads` é invalidado em `DELETE /api/leads/:id` e `POST /api/leads/:id/converter`.
 
 `GET /api/contatos/:telefone/foto` cacheia a URL da foto de perfil WAHA por 1h. Usa sentinela `'NONE'` (string) para indicar "sem foto cacheado" — **nunca** usar `null`, pois `getCache` retorna `null` tanto para chave inexistente quanto para valor `null`, tornando os casos indistinguíveis.
 
@@ -81,7 +98,15 @@ A query de histórico usa `session_id LIKE '55119..%'` para cobrir todos os form
 ### Webhook — autenticação e comportamento
 O N8N deve enviar o header `x-webhook-secret` com o valor de `WEBHOOK_SECRET` do `.env`. Sem ele retorna 401.
 
-HTTP 200 com `{ status: 'Ignorado' }` **não é erro** — significa que o contato está em modo Robô ou não foi encontrado. Nesse caso nada é salvo no banco.
+Existem três endpoints webhook com comportamentos distintos:
+
+| Endpoint | `type` salvo | Lado chat | Filtra `fromMe` | Checa `status_robo` |
+|---|---|---|---|---|
+| `POST /api/webhook/receber` | `human` | Paciente (esquerda) | Sim | Sim — ignora se `'Robô'` |
+| `POST /api/webhook/receber-robo` | `human` | Paciente (esquerda) | Sim | Não — salva sempre |
+| `POST /api/webhook/receber-enviado` | `ai` | Staff/bot (direita) | Não | Não — salva sempre |
+
+HTTP 200 com `{ status: 'Ignorado' }` **não é erro** — significa que o contato está em modo Robô ou não foi encontrado. Nesse caso nada é salvo no banco (apenas em `/receber`).
 
 Salva em `chat_messages` quando `status_robo = 'Humano'` **ou** `'Bloqueado'` (staff vê, bot não responde).
 
@@ -102,6 +127,8 @@ Sem novo status no banco — apenas visual. Usado em `PatientCard`, `CancelModal
 ### Reset do contato ao fechar um ticket
 Quando um agendamento muda para `FINALIZADO`, `CANCELADO` ou `AGENDADO`, o backend atualiza `contatos_whatsapp` com:
 `status_robo='Robô'`, `sessao_intencao='triagem'`, `sessao_rota=0`, `sessao_atualizada_em=NOW()` e zera todos os campos `coleta_*`, `nome_atendimento`, `coleta_id_tisaude`.
+
+**CONFIRMADO não dispara reset** — atendimento ainda está em curso.
 
 ### Triagem — critérios de exibição
 `GET /api/leads` retorna contatos que passam em **todos** estes critérios:
