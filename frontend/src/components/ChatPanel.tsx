@@ -67,6 +67,8 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
           const aceitoMatch = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
           const inicioColetaMatch = !msgOriginalMatch && !aceitoMatch && msg.texto.match(/\[INICIO COLETA:.*?paciente escolheu\s+"([^"]+)"/s);
+          const responderExatamenteMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
+          const convMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch && !responderExatamenteMatch && msg.texto.match(/conv="([^"]+)"/);
           // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
           const textoFinal = msgOriginalMatch
             ? msgOriginalMatch[1].trim()
@@ -74,6 +76,10 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
             ? aceitoMatch[1].trim()
             : inicioColetaMatch
             ? inicioColetaMatch[1].trim()
+            : responderExatamenteMatch
+            ? responderExatamenteMatch[1].trim()
+            : convMatch
+            ? convMatch[1].trim()
             : msg.texto
                 .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
                 .replace(/\[[A-Z][A-Z0-9_ ]*:[^\]]*\]/g, '')
