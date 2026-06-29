@@ -71,7 +71,11 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
             ? { val: aceitoRaw[1].match(/conv="([^"]+)"/) ? aceitoRaw[1].match(/conv="([^"]+)"/)![1] : aceitoRaw[1].trim() }
             : null;
           const inicioColetaMatch = !msgOriginalMatch && !aceitoRaw && msg.texto.match(/\[INICIO COLETA:.*?paciente escolheu\s+"([^"]+)"/s);
-          const responderExatamenteMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
+          // Só usa Responder EXATAMENTE se ele estiver FORA de um bloco [...]
+          const textoSemBlocos = msg.texto.replace(/\[[^\]]*\]/g, '');
+          const responderExatamenteMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch
+            && textoSemBlocos.includes('Responder EXATAMENTE:')
+            && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
           const convMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch && !responderExatamenteMatch && msg.texto.match(/conv="([^"]+)"/);
 
           // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
