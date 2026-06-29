@@ -111,7 +111,7 @@ const clearCache = (prefix) => {
 // ============================================================
 const limiterGeral = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 1500,
   message: { erro: 'Excesso de requisições. Tente novamente em 15 minutos.' }
 });
 app.use('/api/', limiterGeral);
