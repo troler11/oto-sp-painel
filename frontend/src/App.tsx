@@ -191,7 +191,11 @@ export default function App() {
         const res = await fetch(url, { credentials: 'include' });
         if (!res.ok) return;
         const novas: MensagemChat[] = await res.json();
-        if (novas.length > 0) setMensagens(prev => [...prev, ...novas]);
+        if (novas.length > 0) setMensagens(prev => {
+          const vistas = new Set(prev.map(m => `${m.origem}|${Math.floor(new Date(m.data).getTime() / 2000)}|${m.texto}`));
+          const filtradas = novas.filter(n => !vistas.has(`${n.origem}|${Math.floor(new Date(n.data).getTime() / 2000)}|${n.texto}`));
+          return filtradas.length > 0 ? [...prev, ...filtradas] : prev;
+        });
       } catch { /* silencioso */ }
     }, 5000);
     return () => clearInterval(poll);
@@ -234,9 +238,9 @@ export default function App() {
       setAgendamentos(prev => prev.map(a => a.id === payload.id ? { ...a, ...payload } : a));
     });
 
-    socket.on('mensagem:nova', (payload: { telefone: string; texto: string; origem?: MensagemChat['origem'] }) => {
+    socket.on('mensagem:nova', (payload: { telefone: string; texto: string; origem?: MensagemChat['origem']; created_at?: string }) => {
       if (pacienteAtivoChatRef.current?.telefone === payload.telefone) {
-        setMensagens(prev => [...prev, { texto: payload.texto, origem: payload.origem ?? 'paciente', data: new Date().toISOString() }]);
+        setMensagens(prev => [...prev, { texto: payload.texto, origem: payload.origem ?? 'paciente', data: payload.created_at || new Date().toISOString() }]);
       } else {
         adicionarNotificacao(`Nova mensagem de ${payload.telefone}`, 'info');
         setTelefonesComMsgNova(prev => new Set(prev).add(payload.telefone));

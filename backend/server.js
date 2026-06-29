@@ -407,15 +407,15 @@ app.post('/api/webhook/receber', async (req, res) => {
           midia_id = midiaRes.rows[0].id;
         }
         const msgData = { type: 'human', content: texto || '', additional_kwargs: midia_id ? { midia_id } : {} };
-        await pool.query(
-          'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+        const { rows: [{ created_at: msgCreatedAt }] } = await pool.query(
+          'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2) RETURNING created_at',
           [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
         );
         await pool.query(
           'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
           [telefoneLimpo]
         );
-        req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
+        req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto, created_at: msgCreatedAt });
       } else {
         // Bot mode: atualiza ultima_mensagem e desfaz 'concluido' se o bot já havia
         // encerrado o fluxo — sem isso o contato seria bloqueado pelo filtro do frontend
@@ -500,8 +500,8 @@ app.post('/api/webhook/receber-robo', async (req, res) => {
     }
 
     const msgData = { type: 'human', content: texto || '', additional_kwargs: midia_id ? { midia_id } : {} };
-    await pool.query(
-      'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+    const { rows: [{ created_at: msgCreatedAt }] } = await pool.query(
+      'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2) RETURNING created_at',
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
     );
     await pool.query(
@@ -512,7 +512,7 @@ app.post('/api/webhook/receber-robo', async (req, res) => {
       [telefoneLimpo]
     );
 
-    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
+    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto, created_at: msgCreatedAt });
 
     res.json({ sucesso: true });
   } catch (err) {
@@ -584,8 +584,8 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
 
     // type: 'ai' → aparece no lado direito do chat (como staff/bot)
     const msgData = { type: 'ai', content: texto || '', additional_kwargs: { sender: 'Bot', ...(midia_id ? { midia_id } : {}) } };
-    await pool.query(
-      'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
+    const { rows: [{ created_at: msgCreatedAt }] } = await pool.query(
+      'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2) RETURNING created_at',
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
     );
     await pool.query(
@@ -593,7 +593,7 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
       [telefoneLimpo]
     );
 
-    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto, origem: 'ia_ou_recepcao' });
+    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto, origem: 'ia_ou_recepcao', created_at: msgCreatedAt });
 
     res.json({ sucesso: true });
   } catch (err) {
