@@ -593,7 +593,7 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
       [telefoneLimpo]
     );
 
-    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto });
+    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto, origem: 'ia_ou_recepcao' });
 
     res.json({ sucesso: true });
   } catch (err) {

@@ -223,9 +223,9 @@ export default function App() {
       setAgendamentos(prev => prev.map(a => a.id === payload.id ? { ...a, ...payload } : a));
     });
 
-    socket.on('mensagem:nova', (payload: { telefone: string; texto: string }) => {
+    socket.on('mensagem:nova', (payload: { telefone: string; texto: string; origem?: MensagemChat['origem'] }) => {
       if (pacienteAtivoChatRef.current?.telefone === payload.telefone) {
-        setMensagens(prev => [...prev, { texto: payload.texto, origem: 'paciente', data: new Date().toISOString() }]);
+        setMensagens(prev => [...prev, { texto: payload.texto, origem: payload.origem ?? 'paciente', data: new Date().toISOString() }]);
       } else {
         adicionarNotificacao(`Nova mensagem de ${payload.telefone}`, 'info');
       }
