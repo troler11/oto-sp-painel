@@ -67,8 +67,14 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
           const aceitoMatch = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
           const inicioColetaMatch = !msgOriginalMatch && !aceitoMatch && msg.texto.match(/\[INICIO COLETA:.*?paciente escolheu\s+"([^"]+)"/s);
-          const responderExatamenteMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
-          const convMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch && !responderExatamenteMatch && msg.texto.match(/conv="([^"]+)"/);
+          // conv= só vence quando aparece antes do $$$ E essa parte não contém Responder EXATAMENTE
+          const parteAntesDollar = msg.texto.split('$$$')[0];
+          const convAntesDollar = parteAntesDollar.match(/conv="([^"]+)"/);
+          const convMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch
+            && !!convAntesDollar && !/Responder EXATAMENTE/i.test(parteAntesDollar)
+            ? convAntesDollar : null;
+          const responderExatamenteMatch = !msgOriginalMatch && !aceitoMatch && !inicioColetaMatch && !convMatch && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
+
           // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
           const textoFinal = msgOriginalMatch
             ? msgOriginalMatch[1].trim()
