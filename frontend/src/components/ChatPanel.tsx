@@ -4,19 +4,27 @@ import type { ModeloMensagem, MensagemChat, PacienteChat } from '../types';
 import { useApp } from '../context/AppContext';
 import { useProfilePic } from '../hooks/useProfilePic';
 
+function base64ToBlob(b64: string, mime: string): string {
+  try {
+    // Strip data URL prefix se existir
+    const raw = b64.includes(',') ? b64.split(',')[1] : b64;
+    // URL-safe base64 → standard base64 + remove espaços/quebras
+    const std = raw.replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '');
+    // Padding
+    const padded = std + '='.repeat((4 - std.length % 4) % 4);
+    const bin = atob(padded);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([arr], { type: mime }));
+  } catch (e) {
+    console.error('base64ToBlob falhou:', e);
+    return '';
+  }
+}
+
 function AudioMessage({ base64, mimetype }: { base64: string; mimetype: string }) {
-  const src = useMemo(() => {
-    try {
-      const bin = atob(base64);
-      const arr = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      // Mantém mimetype completo (ex: audio/ogg; codecs=opus) — Chrome precisa do codec
-      return URL.createObjectURL(new Blob([arr], { type: mimetype }));
-    } catch { return ''; }
-  }, [base64, mimetype]);
-
+  const src = useMemo(() => base64ToBlob(base64, mimetype), [base64, mimetype]);
   useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
-
   return <audio controls src={src} className="max-w-[280px] rounded-xl" />;
 }
 
@@ -125,10 +133,10 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
             <div className={`max-w-[85%] text-[13px] shadow-sm ${msg.origem === 'sistema' ? 'bg-orange-100 text-orange-900 rounded-xl px-4 py-2 text-xs font-bold border border-orange-200' : msg.origem === 'paciente' ? 'bg-white text-slate-800 rounded-2xl rounded-tl-md px-4 py-3' : 'bg-[#dcf8c6] text-slate-800 rounded-2xl rounded-tr-md px-4 py-3'}`}>
               {msg.mediaBase64 && msg.mediaMimetype?.startsWith('image/') ? (
                 <img
-                  src={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
+                  src={base64ToBlob(msg.mediaBase64, msg.mediaMimetype)}
                   alt={textoFinal}
                   className="max-w-[240px] rounded-xl mb-1 cursor-pointer"
-                  onClick={() => window.open(`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`)}
+                  onClick={() => window.open(base64ToBlob(msg.mediaBase64!, msg.mediaMimetype!))}
                 />
               ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('audio/') ? (
                 <AudioMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
