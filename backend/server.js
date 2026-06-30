@@ -665,8 +665,22 @@ app.post('/api/webhook/receber-midia', async (req, res) => {
   if (!secretValido) return res.status(401).json({ erro: 'Não autorizado.' });
 
   try {
-    const { telefone: telefoneRaw, base64, mimetype, nome, origem: origemReq } = req.body;
-    if (!telefoneRaw || !base64 || !mimetype) return res.status(400).json({ erro: 'telefone, base64 e mimetype são obrigatórios.' });
+    const { telefone: telefoneRaw, mimetype, nome, origem: origemReq } = req.body;
+    let { base64, url: mediaUrl } = req.body;
+
+    if (!telefoneRaw || !mimetype || (!base64 && !mediaUrl))
+      return res.status(400).json({ erro: 'telefone, mimetype e (base64 ou url) são obrigatórios.' });
+
+    // Se não veio base64, baixa do WAHA pelo URL (GOWS engine envia URL, não base64)
+    if (!base64 && mediaUrl) {
+      const fullUrl = String(mediaUrl).startsWith('http') ? mediaUrl : `https://${mediaUrl}`;
+      const wahaHeaders = {};
+      if (WAHA_API_KEY) wahaHeaders['X-Api-Key'] = WAHA_API_KEY;
+      const r = await fetch(fullUrl, { headers: wahaHeaders, signal: AbortSignal.timeout(20_000) });
+      if (!r.ok) return res.status(502).json({ erro: `Falha ao baixar mídia do WAHA: ${r.status}` });
+      const buf = await r.arrayBuffer();
+      base64 = Buffer.from(buf).toString('base64');
+    }
 
     const telefoneLimpo = String(telefoneRaw).match(/^\d+/)?.[0] || '';
     if (!/^55\d{10,11}$/.test(telefoneLimpo)) return res.json({ status: 'Ignorado' });
