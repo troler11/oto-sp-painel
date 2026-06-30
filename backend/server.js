@@ -266,6 +266,9 @@ const criarTabelasExtras = async () => {
         data_criacao     TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    // Garante que coluna telefone (se existir) aceita NULL — não é obrigatória no nosso schema
+    await pool.query(`ALTER TABLE mensagens_midia ADD COLUMN IF NOT EXISTS telefone VARCHAR(20)`);
+    await pool.query(`ALTER TABLE mensagens_midia ALTER COLUMN telefone DROP NOT NULL`);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_limpo (
@@ -673,8 +676,8 @@ app.post('/api/webhook/receber-midia', async (req, res) => {
 
     // Salva base64 em mensagens_midia
     const { rows: [midiaRow] } = await pool.query(
-      'INSERT INTO mensagens_midia (mimetype, conteudo_base64) VALUES ($1, $2) RETURNING id',
-      [mimetype, base64]
+      'INSERT INTO mensagens_midia (telefone, mimetype, conteudo_base64) VALUES ($1, $2, $3) RETURNING id',
+      [telefoneLimpo, mimetype, base64]
     );
     const midia_id = midiaRow.id;
 
