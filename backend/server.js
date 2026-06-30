@@ -593,6 +593,9 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
 
     const telefoneLimpo = telefoneRaw.match(/^\d+/)?.[0] || '';
 
+    // Ignora números fora do padrão brasileiro (55 + DDD + número = 12 ou 13 dígitos)
+    if (!/^55\d{10,11}$/.test(telefoneLimpo)) return res.json({ status: 'Ignorado' });
+
     // Dedup: ignora se o mesmo texto já foi salvo nos últimos 5s (enviado pelo chat do OtoFlow)
     if (texto) {
       const { rows: jaExiste } = await pool.query(
