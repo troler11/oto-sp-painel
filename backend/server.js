@@ -672,7 +672,8 @@ app.post('/api/webhook/receber-midia', async (req, res) => {
     if (!/^55\d{10,11}$/.test(telefoneLimpo)) return res.json({ status: 'Ignorado' });
 
     const origem = origemReq === 'ia_ou_recepcao' ? 'ia_ou_recepcao' : 'paciente';
-    const nomeArquivo = nome || `arquivo.${mimetype.split('/')[1] || 'bin'}`;
+    const ext = (mimetype.split('/')[1] || 'bin').split(';')[0].trim();
+    const nomeArquivo = nome || `arquivo.${ext}`;
 
     // Salva base64 em mensagens_midia
     const { rows: [midiaRow] } = await pool.query(
