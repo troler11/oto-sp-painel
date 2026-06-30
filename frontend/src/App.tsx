@@ -471,14 +471,14 @@ export default function App() {
     setModalAberto(true);
   }, []);
 
-  const confirmarDataEHora = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!pacienteSelecionado) return;
-    const res = await fetchSeguro(`${API_URL}/agendar`, { method: 'PUT', body: JSON.stringify({ id: pacienteSelecionado.id, data_consulta: dataSelecionada, hora_consulta: horaSelecionada, medico_final: medicoSelecionado }) });
+  const confirmarDataEHora = async (medico: string, data: string, hora: string) => {
+    if (!pacienteSelecionado) return;
+    const res = await fetchSeguro(`${API_URL}/agendar`, { method: 'PUT', body: JSON.stringify({ id: pacienteSelecionado.id, data_consulta: data, hora_consulta: hora, medico_final: medico }) });
     if (res.ok) {
       const d = await res.json().catch(() => ({}));
-      setAgendamentos(prev => prev.map(a => a.id === pacienteSelecionado.id ? { ...a, status_atendimento: 'AGENDADO', data_consulta: dataSelecionada, hora_consulta: horaSelecionada, medico_final: medicoSelecionado } : a));
+      setAgendamentos(prev => prev.map(a => a.id === pacienteSelecionado!.id ? { ...a, status_atendimento: 'AGENDADO', data_consulta: data, hora_consulta: hora, medico_final: medico } : a));
       setModalAberto(false);
-      toast(`Consulta agendada para ${dataSelecionada}`, 'sucesso');
+      toast(`Consulta agendada para ${data}`, 'sucesso');
       adicionarNotificacao('Consulta agendada!', 'sucesso');
       if (d.avisoItsaude) toast(d.avisoItsaude, 'aviso');
     }
@@ -1051,7 +1051,7 @@ export default function App() {
         )}
 
         {pacienteTimeline && <PatientTimeline paciente={pacienteTimeline} onClose={() => setPacienteTimeline(null)} />}
-        {modalAberto && pacienteSelecionado && <Suspense fallback={null}><ScheduleModal paciente={pacienteSelecionado} data={dataSelecionada} setData={setDataSelecionada} hora={horaSelecionada} setHora={setHoraSelecionada} medico={medicoSelecionado} setMedico={setMedicoSelecionado} onSubmit={confirmarDataEHora} onClose={() => setModalAberto(false)} /></Suspense>}
+        {modalAberto && pacienteSelecionado && <Suspense fallback={null}><ScheduleModal paciente={pacienteSelecionado} medicoInicial={medicoSelecionado} dataInicial={dataSelecionada} horaInicial={horaSelecionada} onSubmit={confirmarDataEHora} onClose={() => setModalAberto(false)} fetchSeguro={fetchSeguro} /></Suspense>}
         {modalCancelamentoAberto && pacienteCancelamento && <Suspense fallback={null}><CancelModal paciente={pacienteCancelamento} motivo={motivoCancelamento} setMotivo={setMotivoCancelamento} onSubmit={confirmarCancelamento} onClose={() => setModalCancelamentoAberto(false)} /></Suspense>}
         {modalNovoUsuarioAberto && <Suspense fallback={null}><UserModal form={novoUsuarioForm} setForm={setNovoUsuarioForm} msg={msgNovoUsuario} onSubmit={criarNovaConta} onClose={() => setModalNovoUsuarioAberto(false)} /></Suspense>}
         {modalGestaoUsuariosAberto && <Suspense fallback={null}><UserManagementModal usuarios={listaUsuarios} editandoSenhaId={editandoSenhaId} setEditandoSenhaId={setEditandoSenhaId} novaSenha={novaSenhaGestao} setNovaSenha={setNovaSenhaGestao} editandoUsuarioId={editandoUsuarioId} setEditandoUsuarioId={setEditandoUsuarioId} novoNome={novoNomeGestao} setNovoNome={setNovoNomeGestao} onAtualizarNome={atualizarNomeUsuario} onAlterarSenha={alterarSenhaUsuario} onExcluir={excluirUsuario} onClose={() => { setModalGestaoUsuariosAberto(false); setEditandoSenhaId(null); setEditandoUsuarioId(null); }} /></Suspense>}

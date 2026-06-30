@@ -2061,6 +2061,74 @@ async function agendarNoItsaude({ cpf, nascimento, nome, telefone, email, conven
 }
 
 // ============================================================
+// ROTAS iTSaúde — AGENDA (médicos, dias disponíveis, horários)
+// ============================================================
+app.get('/api/itsaude/medicos', verificarToken, async (req, res) => {
+  if (!ITSAUDE_LOGIN || !ITSAUDE_SENHA) return res.status(503).json({ erro: 'iTSaúde não configurado.' });
+  try {
+    const idLocal = idLocalDaUnidade(req.query.unidade || '');
+    const token = _itsaudeTokenExpira > Date.now() ? _itsaudeToken : await _loginItsaude();
+    const r = await fetch(`https://api.tisaude.com/api/schedule/doctors?local=${idLocal}`, {
+      headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(10_000),
+    });
+    const data = await r.json();
+    const lista = data.data || (Array.isArray(data) ? data : []);
+    res.json(lista.map(d => ({ id: d.id, nome: d.name })));
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+app.get('/api/itsaude/dias', verificarToken, async (req, res) => {
+  if (!ITSAUDE_LOGIN || !ITSAUDE_SENHA) return res.status(503).json({ erro: 'iTSaúde não configurado.' });
+  const { unidade, idCalendar, dataInicio } = req.query;
+  if (!idCalendar) return res.status(400).json({ erro: 'idCalendar obrigatório.' });
+  try {
+    const idLocal = idLocalDaUnidade(unidade || '');
+    let token = _itsaudeTokenExpira > Date.now() ? _itsaudeToken : await _loginItsaude();
+    const diasDisponiveis = [];
+    let d = new Date((dataInicio || new Date().toISOString().split('T')[0]) + 'T12:00:00-03:00');
+    for (let i = 0; i < 30 && diasDisponiveis.length < 10; i++) {
+      const dataStr = d.toISOString().split('T')[0];
+      const r = await fetch(
+        `https://api.tisaude.com/api/schedule/${dataStr}?idCalendar=${idCalendar}&idLocal=${idLocal}`,
+        { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }
+      );
+      if (r.status === 401) { token = await _loginItsaude(); }
+      else {
+        const body = await r.json();
+        const itens = Array.isArray(body) ? body : (body.data ? (Array.isArray(body.data) ? body.data : [body.data]) : [body]);
+        if (itens.some(x => x.dayAvailable === true)) diasDisponiveis.push(dataStr);
+      }
+      d.setDate(d.getDate() + 1);
+    }
+    res.json(diasDisponiveis);
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+app.get('/api/itsaude/horarios', verificarToken, async (req, res) => {
+  if (!ITSAUDE_LOGIN || !ITSAUDE_SENHA) return res.status(503).json({ erro: 'iTSaúde não configurado.' });
+  const { unidade, idCalendar, data } = req.query;
+  if (!idCalendar || !data) return res.status(400).json({ erro: 'idCalendar e data obrigatórios.' });
+  try {
+    const idLocal = idLocalDaUnidade(unidade || '');
+    const token = _itsaudeTokenExpira > Date.now() ? _itsaudeToken : await _loginItsaude();
+    const r = await fetch(
+      `https://api.tisaude.com/api/schedule/filter/calendar/hours?idCalendar=${idCalendar}&date=${data}&local=${idLocal}`,
+      { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }
+    );
+    const resp = await r.json();
+    const listaRaw = Array.isArray(resp.schedules) ? resp.schedules
+                   : Array.isArray(resp.data) ? resp.data
+                   : Array.isArray(resp) ? resp : [];
+    const horarios = listaRaw
+      .map(h => typeof h === 'object' ? (h.hour || h.time || '') : String(h))
+      .filter(h => /^\d{2}:\d{2}/.test(h))
+      .map(h => h.substring(0, 5))
+      .sort();
+    res.json(horarios);
+  } catch (e) { res.status(500).json({ erro: e.message }); }
+});
+
+// ============================================================
 async function enviarWhatsApp(telefone, texto) {
   if (!WAHA_API_URL) {
     logger.warn('WAHA_API_URL não configurado. Mensagem não enviada.', { telefone });
