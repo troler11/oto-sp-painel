@@ -267,6 +267,18 @@ const criarTabelasExtras = async () => {
       )
     `);
 
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_limpo (
+        id       SERIAL PRIMARY KEY,
+        telefone VARCHAR(20) NOT NULL,
+        texto    TEXT NOT NULL,
+        origem   VARCHAR(30) NOT NULL,
+        midia_id INTEGER REFERENCES mensagens_midia(id),
+        data     TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_limpo_tel_data ON chat_limpo (telefone, data ASC)`);
+
     logger.info('Tabelas de auditoria e refresh tokens verificadas.');
   } catch (e) {
     logger.error('Erro ao criar tabelas extras', { error: e.message });
@@ -412,6 +424,10 @@ app.post('/api/webhook/receber', async (req, res) => {
           [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
         );
         await pool.query(
+          'INSERT INTO chat_limpo (telefone, texto, origem, midia_id) VALUES ($1, $2, $3, $4)',
+          [telefoneLimpo, texto || '', 'paciente', midia_id || null]
+        );
+        await pool.query(
           'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
           [telefoneLimpo]
         );
@@ -505,6 +521,10 @@ app.post('/api/webhook/receber-robo', async (req, res) => {
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
     );
     await pool.query(
+      'INSERT INTO chat_limpo (telefone, texto, origem, midia_id) VALUES ($1, $2, $3, $4)',
+      [telefoneLimpo, texto || '', 'paciente', midia_id || null]
+    );
+    await pool.query(
       `UPDATE contatos_whatsapp
        SET ultima_mensagem = NOW(),
            sessao_intencao = CASE WHEN sessao_intencao = 'concluido' THEN 'triagem' ELSE sessao_intencao END
@@ -587,6 +607,10 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
     const { rows: [{ created_at: msgCreatedAt }] } = await pool.query(
       'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2) RETURNING created_at',
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+    );
+    await pool.query(
+      'INSERT INTO chat_limpo (telefone, texto, origem, midia_id) VALUES ($1, $2, $3, $4)',
+      [telefoneLimpo, texto || '', 'ia_ou_recepcao', midia_id || null]
     );
     await pool.query(
       'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
@@ -1443,25 +1467,19 @@ app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
   const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
   const desde = req.query.desde;
   try {
-    // LIKE '5511997255184%' cobre todos os formatos: bare, @s.whatsapp.net,
-    // -v23-UUID e variantes com dígitos extras gravadas por versões anteriores
-    const params = [`${telefoneLimpo}%`];
+    const params = [telefoneLimpo];
     let filtroDesde = '';
-    if (desde) { filtroDesde = ` AND created_at > $2`; params.push(new Date(desde)); }
+    if (desde) { filtroDesde = ` AND data > $2`; params.push(new Date(desde)); }
     const { rows } = await pool.query(
-      `SELECT message, created_at FROM chat_messages
-       WHERE session_id LIKE $1${filtroDesde}
-       ORDER BY created_at ASC
+      `SELECT id, texto, origem, data, midia_id
+       FROM chat_limpo
+       WHERE telefone = $1${filtroDesde}
+       ORDER BY data ASC
        LIMIT 200`,
       params
     );
 
-    // Batch-fetch mídia recebida de pacientes (armazenada em mensagens_midia)
-    // midia_id pode estar em msg.additional_kwargs (novo) ou msg.data.additional_kwargs (formato N8N/WAHA)
-    const midiaIds = rows.map(r => {
-      const m = r.message;
-      return m?.additional_kwargs?.midia_id || m?.data?.additional_kwargs?.midia_id;
-    }).filter(Boolean);
+    const midiaIds = rows.map(r => r.midia_id).filter(Boolean);
     let midiaMap = {};
     if (midiaIds.length > 0) {
       const midiaRows = await pool.query(
@@ -1472,15 +1490,13 @@ app.get('/api/chat/:telefone', verificarToken, async (req, res) => {
     }
 
     const formatado = rows.map(r => {
-      const msg = r.message;
-      const ak = msg.additional_kwargs || msg.data?.additional_kwargs || {};
-      const midia = ak.midia_id ? midiaMap[ak.midia_id] : null;
+      const midia = r.midia_id ? midiaMap[r.midia_id] : null;
       return {
-        texto: msg.content || msg.data?.content || msg.text || '',
-        origem: (msg.type === 'human' || msg.sender === 'human') ? 'paciente' : 'ia_ou_recepcao',
-        data: r.created_at,
-        mediaBase64: ak.mediaBase64 || midia?.conteudo_base64 || null,
-        mediaMimetype: ak.mediaMimetype || midia?.mimetype || ak.mimetype || null,
+        texto: r.texto,
+        origem: r.origem,
+        data: r.data,
+        mediaBase64: midia?.conteudo_base64 || null,
+        mediaMimetype: midia?.mimetype || null,
       };
     });
     res.json(formatado);
@@ -1501,6 +1517,10 @@ app.post('/api/chat/enviar', verificarToken, async (req, res) => {
     await pool.query(
       'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+    );
+    await pool.query(
+      'INSERT INTO chat_limpo (telefone, texto, origem) VALUES ($1, $2, $3)',
+      [telefoneLimpo, texto, 'ia_ou_recepcao']
     );
     res.json({ sucesso: true });
   } catch (err) {
@@ -1528,6 +1548,10 @@ app.post('/api/chat/enviar-midia', verificarToken, upload.single('arquivo'), asy
     await pool.query(
       'INSERT INTO chat_messages (session_id, message) VALUES ($1, $2)',
       [`${telefoneLimpo}@s.whatsapp.net`, JSON.stringify(msgData)]
+    );
+    await pool.query(
+      'INSERT INTO chat_limpo (telefone, texto, origem, midia_id) VALUES ($1, $2, $3, $4)',
+      [telefoneLimpo, `📎 ${filename}`, 'ia_ou_recepcao', midiaRow.id]
     );
     res.json({ sucesso: true, filename });
   } catch (err) {
