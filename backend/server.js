@@ -643,6 +643,69 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
 });
 
 // ============================================================
+// WEBHOOK: RECEBER MÍDIA DO N8N (imagem, áudio, PDF, etc.)
+// N8N chama este endpoint em vez de fazer INSERT direto no banco.
+// Payload: { telefone, base64, mimetype, nome?, origem? }
+// origem padrão: 'paciente' — use 'ia_ou_recepcao' para mídia enviada pelo bot
+// ============================================================
+app.post('/api/webhook/receber-midia', async (req, res) => {
+  const tokenFornecido = req.headers['x-webhook-secret'];
+  if (!WEBHOOK_SECRET) return res.status(500).json({ erro: 'Erro de configuração.' });
+  const secretValido = (() => {
+    if (!tokenFornecido) return false;
+    try {
+      const a = Buffer.from(WEBHOOK_SECRET);
+      const b = Buffer.from(tokenFornecido);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch { return false; }
+  })();
+  if (!secretValido) return res.status(401).json({ erro: 'Não autorizado.' });
+
+  try {
+    const { telefone: telefoneRaw, base64, mimetype, nome, origem: origemReq } = req.body;
+    if (!telefoneRaw || !base64 || !mimetype) return res.status(400).json({ erro: 'telefone, base64 e mimetype são obrigatórios.' });
+
+    const telefoneLimpo = String(telefoneRaw).match(/^\d+/)?.[0] || '';
+    if (!/^55\d{10,11}$/.test(telefoneLimpo)) return res.json({ status: 'Ignorado' });
+
+    const origem = origemReq === 'ia_ou_recepcao' ? 'ia_ou_recepcao' : 'paciente';
+    const nomeArquivo = nome || `arquivo.${mimetype.split('/')[1] || 'bin'}`;
+
+    // Salva base64 em mensagens_midia
+    const { rows: [midiaRow] } = await pool.query(
+      'INSERT INTO mensagens_midia (mimetype, conteudo_base64) VALUES ($1, $2) RETURNING id',
+      [mimetype, base64]
+    );
+    const midia_id = midiaRow.id;
+
+    // Texto descritivo baseado no tipo
+    const icone = mimetype.startsWith('image/') ? '📷' : mimetype.startsWith('audio/') ? '🎵' : mimetype === 'application/pdf' ? '📄' : '📎';
+    const textoDesc = `${icone} ${nomeArquivo}`;
+
+    // Salva em chat_limpo
+    await pool.query(
+      'INSERT INTO chat_limpo (telefone, texto, origem, midia_id) VALUES ($1, $2, $3, $4)',
+      [telefoneLimpo, textoDesc, origem, midia_id]
+    );
+
+    // Atualiza ultima_mensagem do contato
+    await pool.query(
+      `INSERT INTO contatos_whatsapp (telefone, ultima_mensagem)
+       VALUES ($1, NOW())
+       ON CONFLICT (telefone) DO UPDATE SET ultima_mensagem = NOW()`,
+      [telefoneLimpo]
+    );
+
+    req.app.get('io')?.emit('mensagem:nova', { telefone: telefoneLimpo, texto: textoDesc, origem });
+
+    res.json({ sucesso: true, midia_id });
+  } catch (err) {
+    logger.error('Erro no webhook receber-midia', { error: err.message });
+    res.status(500).json({ erro: 'Erro interno' });
+  }
+});
+
+// ============================================================
 // AUTH: LOGIN + REFRESH TOKEN
 // ============================================================
 app.get('/api/health', (req, res) => {

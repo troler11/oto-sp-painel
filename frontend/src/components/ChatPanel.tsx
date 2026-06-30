@@ -108,9 +108,35 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           <div key={idx} className={`flex ${msg.origem === 'sistema' ? 'justify-center' : msg.origem === 'paciente' ? 'justify-start' : 'justify-end'}`}>
             <div className={`max-w-[85%] text-[13px] shadow-sm ${msg.origem === 'sistema' ? 'bg-orange-100 text-orange-900 rounded-xl px-4 py-2 text-xs font-bold border border-orange-200' : msg.origem === 'paciente' ? 'bg-white text-slate-800 rounded-2xl rounded-tl-md px-4 py-3' : 'bg-[#dcf8c6] text-slate-800 rounded-2xl rounded-tr-md px-4 py-3'}`}>
               {msg.mediaBase64 && msg.mediaMimetype?.startsWith('image/') ? (
-                <img src={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`} alt={textoFinal} className="max-w-[240px] rounded-xl mb-1 cursor-pointer" onClick={() => window.open(`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`)} />
+                <img
+                  src={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
+                  alt={textoFinal}
+                  className="max-w-[240px] rounded-xl mb-1 cursor-pointer"
+                  onClick={() => window.open(`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`)}
+                />
+              ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('audio/') ? (
+                <audio
+                  controls
+                  src={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
+                  className="max-w-[280px] rounded-xl"
+                />
+              ) : msg.mediaBase64 && msg.mediaMimetype === 'application/pdf' ? (
+                <a
+                  href={`data:application/pdf;base64,${msg.mediaBase64}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-[#005088] font-bold underline"
+                >
+                  📄 {textoFinal.replace(/^📄 /, '')}
+                </a>
               ) : msg.mediaBase64 ? (
-                <a href={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`} download={textoFinal.replace('📎 ', '')} className="flex items-center gap-2 text-[#005088] font-bold underline">{textoFinal}</a>
+                <a
+                  href={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
+                  download={textoFinal.replace(/^[📷🎵📄📎] /, '')}
+                  className="flex items-center gap-2 text-[#005088] font-bold underline"
+                >
+                  {textoFinal}
+                </a>
               ) : (
                 <p className="whitespace-pre-wrap leading-relaxed font-medium">{textoFinal}</p>
               )}
