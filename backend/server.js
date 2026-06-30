@@ -613,7 +613,9 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
       [telefoneLimpo, texto || '', 'ia_ou_recepcao', midia_id || null]
     );
     await pool.query(
-      'UPDATE contatos_whatsapp SET ultima_mensagem = NOW() WHERE telefone = $1',
+      `INSERT INTO contatos_whatsapp (telefone, ultima_mensagem)
+       VALUES ($1, NOW())
+       ON CONFLICT (telefone) DO UPDATE SET ultima_mensagem = NOW()`,
       [telefoneLimpo]
     );
 
