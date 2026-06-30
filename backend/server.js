@@ -2095,8 +2095,8 @@ app.get('/api/itsaude/dias', verificarToken, async (req, res) => {
       if (r.status === 401) { token = await _loginItsaude(); }
       else {
         const body = await r.json();
-        const itens = Array.isArray(body) ? body : (body.data ? (Array.isArray(body.data) ? body.data : [body.data]) : [body]);
-        if (itens.some(x => x.dayAvailable === true)) diasDisponiveis.push(dataStr);
+        // iTSaúde retorna { dayAvailable: true/false } na raiz (igual ao N8N: r.json.dayAvailable === true)
+        if (body.dayAvailable === true) diasDisponiveis.push(dataStr);
       }
       d.setDate(d.getDate() + 1);
     }
