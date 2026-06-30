@@ -700,8 +700,8 @@ app.post('/api/webhook/receber-midia', async (req, res) => {
 
     res.json({ sucesso: true, midia_id });
   } catch (err) {
-    logger.error('Erro no webhook receber-midia', { error: err.message });
-    res.status(500).json({ erro: 'Erro interno' });
+    logger.error('Erro no webhook receber-midia', { error: err.message, stack: err.stack });
+    res.status(500).json({ erro: 'Erro interno', detalhe: err.message });
   }
 });
 
