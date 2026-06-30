@@ -2088,15 +2088,19 @@ app.get('/api/itsaude/dias', verificarToken, async (req, res) => {
     let d = new Date((dataInicio || new Date().toISOString().split('T')[0]) + 'T12:00:00-03:00');
     for (let i = 0; i < 30 && diasDisponiveis.length < 10; i++) {
       const dataStr = d.toISOString().split('T')[0];
+      // Verifica horários reais naquela unidade (local) — dayAvailable ignora idLocal e mostra dias de qualquer unidade
       const r = await fetch(
-        `https://api.tisaude.com/api/schedule/${dataStr}?idCalendar=${idCalendar}&idLocal=${idLocal}`,
+        `https://api.tisaude.com/api/schedule/filter/calendar/hours?idCalendar=${idCalendar}&date=${dataStr}&local=${idLocal}`,
         { headers: { 'Authorization': `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }
       );
       if (r.status === 401) { token = await _loginItsaude(); }
       else {
         const body = await r.json();
-        // iTSaúde retorna { dayAvailable: true/false } na raiz (igual ao N8N: r.json.dayAvailable === true)
-        if (body.dayAvailable === true) diasDisponiveis.push(dataStr);
+        const listaRaw = Array.isArray(body.schedules) ? body.schedules
+                       : Array.isArray(body.data) ? body.data
+                       : Array.isArray(body) ? body : [];
+        const temVaga = listaRaw.some(h => /^\d{2}:\d{2}/.test(typeof h === 'object' ? (h.hour || h.time || '') : String(h)));
+        if (temVaga) diasDisponiveis.push(dataStr);
       }
       d.setDate(d.getDate() + 1);
     }
