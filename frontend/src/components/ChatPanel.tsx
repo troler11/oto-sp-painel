@@ -7,11 +7,11 @@ import { useProfilePic } from '../hooks/useProfilePic';
 function AudioMessage({ base64, mimetype }: { base64: string; mimetype: string }) {
   const src = useMemo(() => {
     try {
-      const mimeBase = mimetype.split(';')[0].trim();
       const bin = atob(base64);
       const arr = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      return URL.createObjectURL(new Blob([arr], { type: mimeBase }));
+      // Mantém mimetype completo (ex: audio/ogg; codecs=opus) — Chrome precisa do codec
+      return URL.createObjectURL(new Blob([arr], { type: mimetype }));
     } catch { return ''; }
   }, [base64, mimetype]);
 

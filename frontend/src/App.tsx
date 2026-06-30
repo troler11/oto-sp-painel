@@ -240,7 +240,26 @@ export default function App() {
 
     socket.on('mensagem:nova', (payload: { telefone: string; texto: string; origem?: MensagemChat['origem']; created_at?: string }) => {
       if (pacienteAtivoChatRef.current?.telefone === payload.telefone) {
-        setMensagens(prev => [...prev, { texto: payload.texto, origem: payload.origem ?? 'paciente', data: payload.created_at || new Date().toISOString() }]);
+        const isMidia = /^[📷🎵📄📎]/.test(payload.texto || '');
+        if (isMidia) {
+          // Mídia não tem base64 no payload do socket — busca imediata no servidor
+          const desde = ultimaMsgDataRef.current;
+          const url = desde
+            ? `${API_URL}/chat/${payload.telefone}?desde=${encodeURIComponent(new Date(new Date(desde).getTime() + 1).toISOString())}`
+            : `${API_URL}/chat/${payload.telefone}`;
+          fetch(url, { credentials: 'include' })
+            .then(r => r.ok ? r.json() : [])
+            .then((novas: MensagemChat[]) => {
+              if (novas.length > 0) setMensagens(prev => {
+                const vistas = new Set(prev.map(m => `${m.origem}|${Math.floor(new Date(m.data).getTime() / 2000)}|${m.texto}`));
+                const filtradas = novas.filter(n => !vistas.has(`${n.origem}|${Math.floor(new Date(n.data).getTime() / 2000)}|${n.texto}`));
+                return filtradas.length > 0 ? [...prev, ...filtradas] : prev;
+              });
+            })
+            .catch(() => {});
+        } else {
+          setMensagens(prev => [...prev, { texto: payload.texto, origem: payload.origem ?? 'paciente', data: payload.created_at || new Date().toISOString() }]);
+        }
       } else {
         adicionarNotificacao(`Nova mensagem de ${payload.telefone}`, 'info');
         setTelefonesComMsgNova(prev => new Set(prev).add(payload.telefone));
