@@ -1,8 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip } from 'lucide-react';
 import type { ModeloMensagem, MensagemChat, PacienteChat } from '../types';
 import { useApp } from '../context/AppContext';
 import { useProfilePic } from '../hooks/useProfilePic';
+
+function AudioMessage({ base64, mimetype }: { base64: string; mimetype: string }) {
+  const src = useMemo(() => {
+    try {
+      const mimeBase = mimetype.split(';')[0].trim();
+      const bin = atob(base64);
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return URL.createObjectURL(new Blob([arr], { type: mimeBase }));
+    } catch { return ''; }
+  }, [base64, mimetype]);
+
+  useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
+
+  return <audio controls src={src} className="max-w-[280px] rounded-xl" />;
+}
 
 interface Props {
   pacienteAtivoChat: PacienteChat;
@@ -115,11 +131,7 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
                   onClick={() => window.open(`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`)}
                 />
               ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('audio/') ? (
-                <audio
-                  controls
-                  src={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
-                  className="max-w-[280px] rounded-xl"
-                />
+                <AudioMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
               ) : msg.mediaBase64 && msg.mediaMimetype === 'application/pdf' ? (
                 <a
                   href={`data:application/pdf;base64,${msg.mediaBase64}`}
