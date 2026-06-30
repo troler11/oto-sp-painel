@@ -1427,6 +1427,42 @@ app.put('/api/agendar', verificarToken, async (req, res) => {
       [data_consulta, hora_consulta, medico_final, id]
     );
 
+    // Integração iTSaúde — tenta criar consulta no sistema externo
+    let avisoItsaude = null;
+    {
+      const { rows: [dadosAg] } = await pool.query(
+        `SELECT a.cpf_paciente, a.nascimento_paciente, a.nome_paciente,
+                a.pagamento AS convenio, a.unidade, c.telefone
+         FROM agendamentos a
+         LEFT JOIN contatos_whatsapp c ON c.id = a.contato_id
+         WHERE a.id = $1`,
+        [id]
+      );
+      if (dadosAg?.cpf_paciente && dadosAg?.nascimento_paciente) {
+        try {
+          const idItsaude = await agendarNoItsaude({
+            cpf: dadosAg.cpf_paciente,
+            nascimento: dadosAg.nascimento_paciente,
+            nome: dadosAg.nome_paciente,
+            telefone: dadosAg.telefone || '',
+            email: '',
+            convenio: dadosAg.convenio || '',
+            unidade: dadosAg.unidade || '',
+            medico: medico_final,
+            data: data_consulta,
+            hora: hora_consulta,
+          });
+          await pool.query('UPDATE agendamentos SET id_itsaude = $1 WHERE id = $2', [idItsaude, id]);
+          logger.info('Consulta criada no iTSaúde', { id_itsaude: idItsaude, agendamento_id: id });
+        } catch (e) {
+          logger.error('Falha ao agendar no iTSaúde', { error: e.message });
+          avisoItsaude = 'Agendado no OtoFlow, mas falhou no iTSaúde — verifique manualmente.';
+        }
+      } else {
+        avisoItsaude = 'CPF ou nascimento ausentes — agendado apenas no OtoFlow.';
+      }
+    }
+
     if (agendados.length > 0) {
       const ag = agendados[0];
       const { rows: contatos } = await pool.query(
@@ -1469,7 +1505,7 @@ app.put('/api/agendar', verificarToken, async (req, res) => {
       medico_final,
     });
 
-    res.json({ sucesso: true });
+    res.json({ sucesso: true, ...(avisoItsaude ? { avisoItsaude } : {}) });
   } catch (err) {
     logger.error('Erro ao agendar', { error: err.message });
     res.status(500).json({ erro: 'Erro ao agendar consulta.' });
@@ -1926,6 +1962,102 @@ async function cancelarNoItsaude(idItsaude) {
     const corpo = await resp.text().catch(() => '');
     throw new Error(`iTSaúde ${resp.status}: ${corpo}`);
   }
+}
+
+// ============================================================
+// HELPERS iTSaúde — AGENDAMENTO MANUAL
+// ============================================================
+function idLocalDaUnidade(unidade) {
+  return String(unidade).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().includes('tatuape') ? 2 : 1;
+}
+
+function mapearConvenio(convenio, unidade) {
+  const c = String(convenio||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  const olimpia = !String(unidade||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().includes('tatuape');
+  if (c.includes('porto'))                              return olimpia ? 30493 : 30475;
+  if (c.includes('omint'))                              return 30491;
+  if (c.includes('bradesco'))                           return 30490;
+  if (c.includes('sami'))                               return olimpia ? 30492 : 32423;
+  if (c.includes('mediservice') || c.includes('itau'))  return 47355;
+  if (c.includes('particular'))                         return olimpia ? 1 : 32285;
+  return 1;
+}
+
+function normalizarNomeMedico(n) {
+  return String(n||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
+    .replace(/^(dr\(a\)\.?\s+|dra?\.?\s+)/,'').trim();
+}
+
+async function agendarNoItsaude({ cpf, nascimento, nome, telefone, email, convenio, unidade, medico, data, hora }) {
+  if (!ITSAUDE_LOGIN || !ITSAUDE_SENHA) throw new Error('iTSaúde não configurado');
+  let token = _itsaudeTokenExpira > Date.now() ? _itsaudeToken : await _loginItsaude();
+
+  const req = async (url, opts = {}) => {
+    const h = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    let r = await fetch(url, { ...opts, headers: h, signal: AbortSignal.timeout(15_000) });
+    if (r.status === 401) { token = await _loginItsaude(); h['Authorization'] = `Bearer ${token}`; r = await fetch(url, { ...opts, headers: h, signal: AbortSignal.timeout(15_000) }); }
+    return r;
+  };
+
+  const idLocal = idLocalDaUnidade(unidade);
+
+  // 1. Buscar idCalendar do médico
+  const medResp = await req(`https://api.tisaude.com/api/schedule/doctors?local=${idLocal}`);
+  const medData = await medResp.json();
+  const lista = medData.data || (Array.isArray(medData) ? medData : []);
+  const prefMedico = normalizarNomeMedico(medico);
+  let idCalendar = null;
+  for (const doc of lista) {
+    const nomeMed = normalizarNomeMedico(doc.name || '');
+    if (nomeMed.includes(prefMedico) || prefMedico.includes(nomeMed)) { idCalendar = doc.id; break; }
+  }
+  if (!idCalendar && lista.length > 0) idCalendar = lista[0].id;
+
+  // 2. Buscar paciente por CPF
+  const buscaResp = await req(`https://api.tisaude.com/api/patients?search=${cpf}`);
+  const buscaData = await buscaResp.json();
+  let idPatient = buscaData.data?.[0]?.id;
+
+  // 3. Criar paciente se não existe
+  if (!idPatient) {
+    await req('https://api.tisaude.com/api/patients/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: nome, cpf,
+        cellphone: String(telefone||'').replace(/\D/g,'').replace(/^55/,''),
+        dateOfBirth: nascimento, email: email || '',
+        country: 'BR', acceptDuplicate: false, acceptDuplicateCpf: false,
+        acceptMinorPatient: false, cellphoneCountry: 'BR',
+      }),
+    });
+    const rebusca = await req(`https://api.tisaude.com/api/patients?search=${cpf}`);
+    const rebuscaData = await rebusca.json();
+    idPatient = rebuscaData.data?.[0]?.id;
+  }
+  if (!idPatient) throw new Error('Paciente não encontrado nem criado no iTSaúde');
+
+  // 4. Buscar dados completos do paciente
+  const pacResp = await req(`https://api.tisaude.com/api/patients/${idPatient}`);
+  const paciente = await pacResp.json();
+
+  // 5. Criar agendamento
+  const dateSchudule = data.includes('-') ? data.split('-').reverse().join('/') : data;
+  const idHealthInsurance = mapearConvenio(convenio, unidade);
+  const agResp = await req('https://api.tisaude.com/api/schedule/new', {
+    method: 'POST',
+    body: JSON.stringify({
+      idPatient, email: email || paciente.email || '',
+      typeQuery: 'CONSULTA',
+      name: paciente.name, cpf: paciente.cpf,
+      dateOfBirth: paciente.dateOfBirth, cellphone: paciente.cellphone,
+      idHealthInsurance,
+      schedule: [{ id: '', idScheduleReturn: null, dateSchudule, local: idLocal, idCalendar, procedures: [1], hour: `${hora}:00` }],
+    }),
+  });
+  const agData = await agResp.json();
+  const appointmentId = agData.appointment?.id || agData.id;
+  if (!appointmentId) throw new Error(`iTSaúde não retornou appointment.id: ${JSON.stringify(agData).substring(0, 200)}`);
+  return appointmentId;
 }
 
 // ============================================================

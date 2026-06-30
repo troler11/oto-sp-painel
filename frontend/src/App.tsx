@@ -474,7 +474,14 @@ export default function App() {
   const confirmarDataEHora = async (e: React.FormEvent) => {
     e.preventDefault(); if (!pacienteSelecionado) return;
     const res = await fetchSeguro(`${API_URL}/agendar`, { method: 'PUT', body: JSON.stringify({ id: pacienteSelecionado.id, data_consulta: dataSelecionada, hora_consulta: horaSelecionada, medico_final: medicoSelecionado }) });
-    if (res.ok) { setAgendamentos(prev => prev.map(a => a.id === pacienteSelecionado.id ? { ...a, status_atendimento: 'AGENDADO', data_consulta: dataSelecionada, hora_consulta: horaSelecionada, medico_final: medicoSelecionado } : a)); setModalAberto(false); toast(`Consulta agendada para ${dataSelecionada}`, 'sucesso'); adicionarNotificacao('Consulta agendada!', 'sucesso'); }
+    if (res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setAgendamentos(prev => prev.map(a => a.id === pacienteSelecionado.id ? { ...a, status_atendimento: 'AGENDADO', data_consulta: dataSelecionada, hora_consulta: horaSelecionada, medico_final: medicoSelecionado } : a));
+      setModalAberto(false);
+      toast(`Consulta agendada para ${dataSelecionada}`, 'sucesso');
+      adicionarNotificacao('Consulta agendada!', 'sucesso');
+      if (d.avisoItsaude) toast(d.avisoItsaude, 'aviso');
+    }
     else { const d = await res.json().catch(() => ({})); toast(d.erro || 'Falha.', 'erro'); }
   };
 
