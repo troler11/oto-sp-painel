@@ -593,6 +593,17 @@ app.post('/api/webhook/receber-enviado', async (req, res) => {
 
     const telefoneLimpo = telefoneRaw.match(/^\d+/)?.[0] || '';
 
+    // Dedup: ignora se o mesmo texto já foi salvo nos últimos 5s (enviado pelo chat do OtoFlow)
+    if (texto) {
+      const { rows: jaExiste } = await pool.query(
+        `SELECT 1 FROM chat_limpo
+         WHERE telefone = $1 AND texto = $2 AND origem = 'ia_ou_recepcao'
+         AND data > NOW() - INTERVAL '5 seconds' LIMIT 1`,
+        [telefoneLimpo, texto]
+      );
+      if (jaExiste.length > 0) return res.json({ status: 'Ignorado' });
+    }
+
     let midia_id = null;
     if (midiaBase64 && midiaMimetype) {
       const midiaRes = await pool.query(
