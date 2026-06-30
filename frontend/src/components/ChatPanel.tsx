@@ -63,6 +63,14 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
         {mensagens.map((msg, idx) => {
+          // Oculta echo N8N: paciente que repete exatamente o que o bot acabou de dizer
+          if (msg.origem === 'paciente' && idx > 0) {
+            const prev = mensagens[idx - 1];
+            if (prev.origem === 'ia_ou_recepcao') {
+              const prevTexto = prev.texto.split('$$$')[0].trim();
+              if (msg.texto.trim() === prevTexto) return null;
+            }
+          }
           // Padrões que extraem só o valor e ignoram o resto da mensagem
           const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
           const aceitoRaw = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
