@@ -143,8 +143,11 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
   const fotoPerfil = useProfilePic(pacienteAtivoChat.telefone);
   const [fotoErro, setFotoErro] = useState(false);
   const [slashIndex, setSlashIndex] = useState(0);
+  const [imagemAmpliada, setImagemAmpliada] = useState<string | null>(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
+
+  useEffect(() => { if (imagemAmpliada) return () => URL.revokeObjectURL(imagemAmpliada); }, [imagemAmpliada]);
 
   // Auto-cresce o campo de texto conforme o conteúdo (igual WhatsApp), até um limite
   useEffect(() => {
@@ -304,7 +307,7 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
                     src={base64ToBlob(msg.mediaBase64, msg.mediaMimetype)}
                     alt={textoFinal}
                     className="max-w-[240px] rounded-xl mb-1 cursor-pointer"
-                    onClick={() => window.open(base64ToBlob(msg.mediaBase64!, msg.mediaMimetype!))}
+                    onClick={() => setImagemAmpliada(base64ToBlob(msg.mediaBase64!, msg.mediaMimetype!))}
                   />
                 ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('audio/') ? (
                   <AudioMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
@@ -445,6 +448,17 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           </button>
         </form>
       </div>
+
+      {imagemAmpliada && (
+        <div className="fixed inset-0 bg-black/85 z-[200] flex items-center justify-center p-6"
+          onClick={() => setImagemAmpliada(null)}
+          onKeyDown={e => { if (e.key === 'Escape') setImagemAmpliada(null); }} tabIndex={-1} ref={el => el?.focus()}>
+          <button onClick={() => setImagemAmpliada(null)} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors">
+            <X size={22} />
+          </button>
+          <img src={imagemAmpliada} alt="Imagem ampliada" className="max-w-full max-h-full rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </aside>
   );
 }
