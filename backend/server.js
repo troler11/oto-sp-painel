@@ -283,6 +283,9 @@ const criarTabelasExtras = async () => {
     `);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_chat_limpo_tel_data ON chat_limpo (telefone, data ASC)`);
 
+    // Marca quando o último alerta de "ticket parado" foi disparado (evita spam a cada checagem)
+    await pool.query(`ALTER TABLE agendamentos ADD COLUMN IF NOT EXISTS alerta_parado_em TIMESTAMPTZ`);
+
     logger.info('Tabelas de auditoria e refresh tokens verificadas.');
   } catch (e) {
     logger.error('Erro ao criar tabelas extras', { error: e.message });
@@ -2360,6 +2363,40 @@ setInterval(async () => {
     logger.warn('Erro na limpeza de tokens', { error: e.message });
   }
 }, 60 * 60 * 1000); // 1 hora
+
+// ============================================================
+// ALERTA: tickets parados (esquecidos pelo atendente)
+// - EM ATENDIMENTO há mais de 2h sem avançar
+// - AGENDADO/CONFIRMADO cuja consulta já passou há mais de 1h sem finalizar
+// Reenvia o alerta a cada 3h enquanto o ticket continuar parado.
+// ============================================================
+setInterval(async () => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, nome_paciente, atendente_nome, status_atendimento,
+        CASE
+          WHEN status_atendimento = 'EM ATENDIMENTO' THEN 'Em atendimento há mais de 2h sem avançar'
+          ELSE 'Consulta já passou e o ticket não foi finalizado'
+        END AS motivo
+      FROM agendamentos
+      WHERE (alerta_parado_em IS NULL OR alerta_parado_em < NOW() - INTERVAL '3 hours')
+        AND (
+          (status_atendimento = 'EM ATENDIMENTO' AND COALESCE(data_atualizacao, data_criacao) < NOW() - INTERVAL '2 hours')
+          OR
+          (status_atendimento IN ('AGENDADO', 'CONFIRMADO') AND data_consulta IS NOT NULL
+            AND (data_consulta + COALESCE(hora_consulta, '00:00'::time)) < NOW() - INTERVAL '1 hour')
+        )
+    `);
+
+    if (rows.length > 0) {
+      await pool.query(`UPDATE agendamentos SET alerta_parado_em = NOW() WHERE id = ANY($1)`, [rows.map(r => r.id)]);
+      rows.forEach(r => io.emit('agendamento:parado', { id: r.id, nome_paciente: r.nome_paciente, atendente_nome: r.atendente_nome, status_atendimento: r.status_atendimento, motivo: r.motivo }));
+      logger.info(`Alerta de ticket parado: ${rows.length} ticket(s) notificado(s).`);
+    }
+  } catch (e) {
+    logger.warn('Erro na checagem de tickets parados', { error: e.message });
+  }
+}, 15 * 60 * 1000); // 15 minutos
 
 // ============================================================
 // SERVIR O FRONTEND REACT

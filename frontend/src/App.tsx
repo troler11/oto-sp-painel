@@ -237,6 +237,12 @@ export default function App() {
       setAgendamentos(prev => prev.map(a => a.id === payload.id ? { ...a, ...payload } : a));
     });
 
+    socket.on('agendamento:parado', (payload: { id: number; nome_paciente: string; atendente_nome?: string; motivo: string }) => {
+      const texto = `${payload.nome_paciente}${payload.atendente_nome ? ` (${payload.atendente_nome})` : ''}: ${payload.motivo}`;
+      toast(`⏰ ${texto}`, 'aviso');
+      adicionarNotificacao(texto, 'aviso');
+    });
+
     socket.on('mensagem:nova', (payload: { telefone: string; texto: string; origem?: MensagemChat['origem']; created_at?: string }) => {
       if (pacienteAtivoChatRef.current?.telefone === payload.telefone) {
         const isMidia = /^[📷🎵🎥📄📎]/.test(payload.texto || '');
