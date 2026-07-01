@@ -92,6 +92,7 @@ export default function App() {
   const [novoContatoForm, setNovoContatoForm] = useState<{ aberto: boolean; telefone: string; nome: string }>({ aberto: false, telefone: '', nome: '' });
   const [editandoContato, setEditandoContato] = useState<{ id: number; nome: string; telefone: string } | null>(null);
   const [filtro, setFiltro] = useState('TRIAGEM');
+  const [subFiltroAgendado, setSubFiltroAgendado] = useState<'TODOS' | 'AGENDADO' | 'CONFIRMADO'>('TODOS');
   const [editandoNomeLead, setEditandoNomeLead] = useState<{ id: number; valor: string } | null>(null);
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
@@ -227,6 +228,13 @@ export default function App() {
 
   useEffect(() => {
     if (!sessao) return;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, [sessao]);
+
+  useEffect(() => {
+    if (!sessao) return;
     buscarDados();
     buscarModelos();
 
@@ -241,6 +249,9 @@ export default function App() {
       const texto = `${payload.nome_paciente}${payload.atendente_nome ? ` (${payload.atendente_nome})` : ''}: ${payload.motivo}`;
       toast(`⏰ ${texto}`, 'aviso');
       adicionarNotificacao(texto, 'aviso');
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) {
+        try { new Notification('OtoFlow — ticket parado', { body: texto, icon: '/logo.png' }); } catch { /* alguns navegadores bloqueiam sem gesto do usuário */ }
+      }
     });
 
     socket.on('mensagem:nova', (payload: { telefone: string; texto: string; origem?: MensagemChat['origem']; created_at?: string }) => {
@@ -648,7 +659,8 @@ export default function App() {
     TRIAGEM: leads.filter(l => l.sessao_intencao !== 'concluido').length,
     PENDENTE: agendamentos.filter(a => a.status_atendimento === 'PENDENTE').length,
     'EM ATENDIMENTO': agendamentos.filter(a => a.status_atendimento === 'EM ATENDIMENTO').length,
-    AGENDADO: agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length,
+    AGENDADO: agendamentos.filter(a => a.status_atendimento === 'AGENDADO' || a.status_atendimento === 'CONFIRMADO').length,
+    AGENDADO_PURO: agendamentos.filter(a => a.status_atendimento === 'AGENDADO').length,
     CONFIRMADO: agendamentos.filter(a => a.status_atendimento === 'CONFIRMADO').length,
     FINALIZADO: agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length,
     CANCELADO: agendamentos.filter(a => a.status_atendimento === 'CANCELADO').length,
@@ -743,16 +755,20 @@ export default function App() {
   };
 
   // ── App autenticado ───────────────────────────────────────────
-  const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO', 'FINALIZADO', 'CANCELADO'] as const;
+  const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO', 'CANCELADO'] as const;
   const ABAS_DESCRICAO: Record<typeof ABAS[number], string> = {
     TRIAGEM: 'Contatos que mandaram mensagem e ainda não têm ficha aberta',
     PENDENTE: 'Fichas abertas aguardando um atendente assumir',
     'EM ATENDIMENTO': 'Atendente já assumiu e está coletando dados do paciente',
-    AGENDADO: 'Consulta marcada, aguardando a data chegar',
-    CONFIRMADO: 'Paciente confirmou presença, consulta ainda vai acontecer',
+    AGENDADO: 'Consulta marcada, aguardando a data chegar — inclui confirmadas pelo paciente',
     FINALIZADO: 'Atendimento concluído — nada pendente aqui',
     CANCELADO: 'Consulta cancelada ou ticket descartado sem agendamento',
   };
+  const SUB_FILTROS_AGENDADO = [
+    { id: 'TODOS', label: 'Todos' },
+    { id: 'AGENDADO', label: 'Aguardando confirmação' },
+    { id: 'CONFIRMADO', label: 'Confirmados' },
+  ] as const;
 
   const exportarLeadsCSV = () => {
     const BOM = '﻿';
@@ -850,7 +866,9 @@ export default function App() {
       );
     }
 
-    const lista = filtrosAg.filter(a => a.status_atendimento === filtro);
+    const lista = filtro === 'AGENDADO'
+      ? filtrosAg.filter(a => (a.status_atendimento === 'AGENDADO' || a.status_atendimento === 'CONFIRMADO') && (subFiltroAgendado === 'TODOS' || a.status_atendimento === subFiltroAgendado))
+      : filtrosAg.filter(a => a.status_atendimento === filtro);
     if (filtro === 'PENDENTE') lista.sort((a, b) => new Date(a.data_criacao).getTime() - new Date(b.data_criacao).getTime());
 
     if (primeiraCarregamento) return <CardSkeletonGrid count={6} />;
@@ -911,7 +929,7 @@ export default function App() {
                   {ABAS.map(aba => (
                     <button key={aba} onClick={() => setFiltro(aba)} title={ABAS_DESCRICAO[aba]}
                       className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs transition-all whitespace-nowrap ${filtro === aba ? 'bg-[#005088] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-                      {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'CONFIRMADO' ? 'Confirmados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
+                      {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
                       {(contagens[aba] ?? 0) > 0 && <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filtro === aba ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagens[aba]}</span>}
                     </button>
                   ))}
@@ -920,6 +938,23 @@ export default function App() {
                   className="flex items-center gap-2 bg-[#11caa0] hover:bg-[#0fb38a] text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm shrink-0">
                   <UserPlus size={15} /> Novo Ticket
                 </button>
+              </div>
+            )}
+
+            {filtro === 'AGENDADO' && (
+              <div className="flex gap-1.5 mb-6 -mt-3">
+                {SUB_FILTROS_AGENDADO.map(sub => {
+                  const contagemSub = sub.id === 'AGENDADO' ? contagens.AGENDADO_PURO : sub.id === 'CONFIRMADO' ? contagens.CONFIRMADO : undefined;
+                  return (
+                    <button key={sub.id} onClick={() => setSubFiltroAgendado(sub.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${subFiltroAgendado === sub.id ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                      {sub.label}
+                      {contagemSub !== undefined && contagemSub > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${subFiltroAgendado === sub.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagemSub}</span>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
