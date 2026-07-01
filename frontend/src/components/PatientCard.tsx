@@ -72,12 +72,12 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
   const [fotoErro, setFotoErro] = useState(false);
 
   const corBorda = isPendente
-    ? urgencia === 'critica' ? 'border-red-500 ring-2 ring-red-400 ring-offset-1 shadow-red-100' : urgencia === 'alta' ? 'border-red-300 shadow-red-50' : urgencia === 'media' ? 'border-amber-200' : 'border-slate-200'
+    ? urgencia === 'critica' ? 'border-red-400 shadow-red-100' : urgencia === 'alta' ? 'border-red-300 shadow-red-50' : urgencia === 'media' ? 'border-amber-200' : 'border-slate-200'
     : 'border-slate-200';
 
   const isDescartado = item.status_atendimento === 'CANCELADO' && !item.data_consulta;
   const corBarra = isPendente
-    ? urgencia === 'critica' ? 'bg-gradient-to-b from-red-600 to-red-500 animate-pulse' : urgencia === 'alta' ? 'bg-gradient-to-b from-red-500 to-orange-500' : urgencia === 'media' ? 'bg-amber-400' : 'bg-amber-300'
+    ? urgencia === 'critica' ? 'bg-gradient-to-b from-red-600 to-red-500' : urgencia === 'alta' ? 'bg-gradient-to-b from-red-500 to-orange-500' : urgencia === 'media' ? 'bg-amber-400' : 'bg-amber-300'
     : item.status_atendimento === 'EM ATENDIMENTO' ? 'bg-gradient-to-b from-amber-400 to-orange-400 animate-pulse'
     : item.status_atendimento === 'AGENDADO' ? 'bg-gradient-to-b from-emerald-500 to-teal-500'
     : item.status_atendimento === 'CONFIRMADO' ? 'bg-gradient-to-b from-violet-500 to-violet-600'
@@ -142,9 +142,9 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
 
       {/* Timer ao vivo */}
       {isPendente ? (
-        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgencia === 'critica' ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse' : urgencia === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgencia === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
-          <Clock size={11} className={urgencia === 'critica' || urgencia === 'alta' ? 'animate-pulse' : ''} />
-          {timerVivo} na fila{urgencia === 'critica' ? ' — aguardando há muito tempo ⚠️' : ''}
+        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgencia === 'critica' ? 'bg-red-100 text-red-700 border border-red-300' : urgencia === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgencia === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+          <Clock size={11} className={urgencia === 'alta' ? 'animate-pulse' : ''} />
+          {timerVivo} na fila{urgencia === 'critica' ? ' — aguardando há muito tempo' : ''}
         </div>
       ) : emAndamento && (
         <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgenciaParado === 'critica' || urgenciaParado === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgenciaParado === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
