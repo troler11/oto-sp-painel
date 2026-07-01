@@ -34,6 +34,70 @@ function VideoMessage({ base64, mimetype }: { base64: string; mimetype: string }
   return <video controls src={src} className="max-w-[280px] rounded-xl" />;
 }
 
+// Extrai o texto exibível de uma mensagem, aplicando os filtros de blocos N8N.
+// Retorna null quando a mensagem inteira deve ser ocultada (echo, vazia, JSON puro).
+function extrairTextoFinal(msg: MensagemChat, mensagens: MensagemChat[], idx: number): string | null {
+  // Oculta echo N8N: paciente que repete exatamente o que o bot acabou de dizer
+  if (msg.origem === 'paciente' && idx > 0) {
+    const prev = mensagens[idx - 1];
+    if (prev.origem === 'ia_ou_recepcao') {
+      const prevTexto = prev.texto.split('$$$')[0].trim();
+      if (msg.texto.trim() === prevTexto) return null;
+    }
+  }
+  // Padrões que extraem só o valor e ignoram o resto da mensagem
+  const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
+  const aceitoRaw = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
+  // Se o conteúdo do ACEITO tiver conv=, extrai só o valor do conv
+  const aceitoMatch = aceitoRaw
+    ? { val: aceitoRaw[1].match(/conv="([^"]+)"/) ? aceitoRaw[1].match(/conv="([^"]+)"/)![1] : aceitoRaw[1].trim() }
+    : null;
+  const inicioColetaMatch = !msgOriginalMatch && !aceitoRaw && msg.texto.match(/\[INICIO COLETA:.*?paciente escolheu\s+"([^"]+)"/s);
+  // Só usa Responder EXATAMENTE se ele estiver FORA de um bloco [...]
+  const textoSemBlocos = msg.texto.replace(/\[[^\]]*\]/g, '');
+  const responderExatamenteMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch
+    && textoSemBlocos.includes('Responder EXATAMENTE:')
+    && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
+  const convMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch && !responderExatamenteMatch && msg.texto.match(/conv="([^"]+)"/);
+
+  // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
+  const textoFinal = msgOriginalMatch
+    ? msgOriginalMatch[1].trim()
+    : aceitoMatch
+    ? aceitoMatch.val
+    : inicioColetaMatch
+    ? inicioColetaMatch[1].trim()
+    : responderExatamenteMatch
+    ? responderExatamenteMatch[1].trim()
+    : convMatch
+    ? convMatch[1].trim()
+    : msg.texto
+        .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
+        .replace(/\[[^\]:]+:[^\]]*\]/g, '')
+        .replace(/\[[A-Z][A-Z0-9_]+\]/g, '')
+        .split('$$$')[0].trim();
+  if (!textoFinal) return null;
+  try { if (textoFinal.startsWith('{') && JSON.parse(textoFinal)) return null; } catch { /* não é JSON */ }
+  return textoFinal;
+}
+
+function labelSeparadorData(d: Date): string {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const ontem = new Date(hoje); ontem.setDate(hoje.getDate() - 1);
+  const dia = new Date(d); dia.setHours(0, 0, 0, 0);
+  if (dia.getTime() === hoje.getTime()) return 'Hoje';
+  if (dia.getTime() === ontem.getTime()) return 'Ontem';
+  return dia.toLocaleDateString('pt-BR', dia.getFullYear() === hoje.getFullYear() ? { day: '2-digit', month: 'long' } : { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
+function SeparadorData({ data }: { data: Date }) {
+  return (
+    <div className="flex justify-center my-2">
+      <span className="bg-white/80 text-slate-500 text-[11px] font-bold px-3 py-1 rounded-lg shadow-sm">{labelSeparadorData(data)}</span>
+    </div>
+  );
+}
+
 interface Props {
   pacienteAtivoChat: PacienteChat;
   mensagens: MensagemChat[];
@@ -78,6 +142,15 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
 
   const selecionarModeloSlash = (m: ModeloMensagem) => { setNovaMensagem(m.texto); textareaRef.current?.focus(); };
 
+  const mensagensVisiveis = useMemo(() => {
+    const out: { msg: MensagemChat; textoFinal: string }[] = [];
+    mensagens.forEach((msg, idx) => {
+      const textoFinal = extrairTextoFinal(msg, mensagens, idx);
+      if (textoFinal !== null) out.push({ msg, textoFinal });
+    });
+    return out;
+  }, [mensagens]);
+
   return (
     <aside className="fixed right-0 top-0 h-screen w-[400px] bg-white border-l border-slate-200 shadow-2xl flex flex-col z-[60] animate-slide-up">
       <div className="p-4 bg-gradient-to-r from-[#005088] to-[#003a66] text-white flex justify-between items-center shrink-0">
@@ -108,89 +181,54 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
-        {mensagens.map((msg, idx) => {
-          // Oculta echo N8N: paciente que repete exatamente o que o bot acabou de dizer
-          if (msg.origem === 'paciente' && idx > 0) {
-            const prev = mensagens[idx - 1];
-            if (prev.origem === 'ia_ou_recepcao') {
-              const prevTexto = prev.texto.split('$$$')[0].trim();
-              if (msg.texto.trim() === prevTexto) return null;
-            }
-          }
-          // Padrões que extraem só o valor e ignoram o resto da mensagem
-          const msgOriginalMatch = msg.texto.match(/\[Mensagem original:\s*([\s\S]*?)\]/);
-          const aceitoRaw = !msgOriginalMatch && msg.texto.match(/\[[^\]]*ACEITO:\s*([^\]]+)\]/);
-          // Se o conteúdo do ACEITO tiver conv=, extrai só o valor do conv
-          const aceitoMatch = aceitoRaw
-            ? { val: aceitoRaw[1].match(/conv="([^"]+)"/) ? aceitoRaw[1].match(/conv="([^"]+)"/)![1] : aceitoRaw[1].trim() }
-            : null;
-          const inicioColetaMatch = !msgOriginalMatch && !aceitoRaw && msg.texto.match(/\[INICIO COLETA:.*?paciente escolheu\s+"([^"]+)"/s);
-          // Só usa Responder EXATAMENTE se ele estiver FORA de um bloco [...]
-          const textoSemBlocos = msg.texto.replace(/\[[^\]]*\]/g, '');
-          const responderExatamenteMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch
-            && textoSemBlocos.includes('Responder EXATAMENTE:')
-            && msg.texto.match(/Responder EXATAMENTE:\s*"([\s\S]*?)"/);
-          const convMatch = !msgOriginalMatch && !aceitoRaw && !inicioColetaMatch && !responderExatamenteMatch && msg.texto.match(/conv="([^"]+)"/);
-
-          // Strip N8N blocks ANTES do split em $$$, pois $$$ pode estar dentro do bloco
-          const textoFinal = msgOriginalMatch
-            ? msgOriginalMatch[1].trim()
-            : aceitoMatch
-            ? aceitoMatch.val
-            : inicioColetaMatch
-            ? inicioColetaMatch[1].trim()
-            : responderExatamenteMatch
-            ? responderExatamenteMatch[1].trim()
-            : convMatch
-            ? convMatch[1].trim()
-            : msg.texto
-                .replace(/\[[A-Z][A-Z0-9_]+\][\s\S]*?\[\/[A-Z_]+\]/g, '')
-                .replace(/\[[^\]:]+:[^\]]*\]/g, '')
-                .replace(/\[[A-Z][A-Z0-9_]+\]/g, '')
-                .split('$$$')[0].trim();
-          if (!textoFinal) return null;
-          try { if (textoFinal.startsWith('{') && JSON.parse(textoFinal)) return null; } catch { /* não é JSON */ }
+        {mensagensVisiveis.map(({ msg, textoFinal }, i) => {
+          const dataAtual = new Date(msg.data);
+          const dataAnterior = i > 0 ? new Date(mensagensVisiveis[i - 1].msg.data) : null;
+          const mudouDia = !dataAnterior || dataAtual.toDateString() !== dataAnterior.toDateString();
           return (
-          <div key={idx} className={`flex ${msg.origem === 'sistema' ? 'justify-center' : msg.origem === 'paciente' ? 'justify-start' : 'justify-end'}`}>
-            <div className={`max-w-[85%] text-[13px] shadow-sm ${msg.origem === 'sistema' ? 'bg-orange-100 text-orange-900 rounded-xl px-4 py-2 text-xs font-bold border border-orange-200' : msg.origem === 'paciente' ? 'bg-white text-slate-800 rounded-2xl rounded-tl-md px-4 py-3' : 'bg-[#dcf8c6] text-slate-800 rounded-2xl rounded-tr-md px-4 py-3'}`}>
-              {msg.mediaBase64 && msg.mediaMimetype?.startsWith('image/') ? (
-                <img
-                  src={base64ToBlob(msg.mediaBase64, msg.mediaMimetype)}
-                  alt={textoFinal}
-                  className="max-w-[240px] rounded-xl mb-1 cursor-pointer"
-                  onClick={() => window.open(base64ToBlob(msg.mediaBase64!, msg.mediaMimetype!))}
-                />
-              ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('audio/') ? (
-                <AudioMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
-              ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('video/') ? (
-                <VideoMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
-              ) : msg.mediaBase64 && msg.mediaMimetype === 'application/pdf' ? (
-                <a
-                  href={`data:application/pdf;base64,${msg.mediaBase64}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 text-[#005088] font-bold underline"
-                >
-                  📄 {textoFinal.replace(/^📄 /, '')}
-                </a>
-              ) : msg.mediaBase64 ? (
-                <a
-                  href={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
-                  download={textoFinal.replace(/^[📷🎵🎥📄📎] /, '')}
-                  className="flex items-center gap-2 text-[#005088] font-bold underline"
-                >
-                  {textoFinal}
-                </a>
-              ) : (
-                <p className="whitespace-pre-wrap leading-relaxed font-medium">{textoFinal}</p>
-              )}
-              {msg.origem !== 'sistema' && (
-                <span className="text-[10px] text-slate-400/80 block mt-1.5 text-right font-bold">
-                  {new Date(msg.data).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
+          <React.Fragment key={i}>
+            {mudouDia && <SeparadorData data={dataAtual} />}
+            <div className={`flex ${msg.origem === 'sistema' ? 'justify-center' : msg.origem === 'paciente' ? 'justify-start' : 'justify-end'}`}>
+              <div className={`max-w-[85%] text-[13px] shadow-sm ${msg.origem === 'sistema' ? 'bg-orange-100 text-orange-900 rounded-xl px-4 py-2 text-xs font-bold border border-orange-200' : msg.origem === 'paciente' ? 'bg-white text-slate-800 rounded-2xl rounded-tl-md px-4 py-3' : 'bg-[#dcf8c6] text-slate-800 rounded-2xl rounded-tr-md px-4 py-3'}`}>
+                {msg.mediaBase64 && msg.mediaMimetype?.startsWith('image/') ? (
+                  <img
+                    src={base64ToBlob(msg.mediaBase64, msg.mediaMimetype)}
+                    alt={textoFinal}
+                    className="max-w-[240px] rounded-xl mb-1 cursor-pointer"
+                    onClick={() => window.open(base64ToBlob(msg.mediaBase64!, msg.mediaMimetype!))}
+                  />
+                ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('audio/') ? (
+                  <AudioMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
+                ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('video/') ? (
+                  <VideoMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
+                ) : msg.mediaBase64 && msg.mediaMimetype === 'application/pdf' ? (
+                  <a
+                    href={`data:application/pdf;base64,${msg.mediaBase64}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-[#005088] font-bold underline"
+                  >
+                    📄 {textoFinal.replace(/^📄 /, '')}
+                  </a>
+                ) : msg.mediaBase64 ? (
+                  <a
+                    href={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
+                    download={textoFinal.replace(/^[📷🎵🎥📄📎] /, '')}
+                    className="flex items-center gap-2 text-[#005088] font-bold underline"
+                  >
+                    {textoFinal}
+                  </a>
+                ) : (
+                  <p className="whitespace-pre-wrap leading-relaxed font-medium">{textoFinal}</p>
+                )}
+                {msg.origem !== 'sistema' && (
+                  <span className="text-[10px] text-slate-400/80 block mt-1.5 text-right font-bold">
+                    {dataAtual.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
+          </React.Fragment>
           );
         })}
         {digitando && (
