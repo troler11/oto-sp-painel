@@ -97,7 +97,7 @@ export default function WahaModal({ onClose }: Props) {
   const isWaitingQR = dados?.status === 'SCAN_QR_CODE';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#005088] to-[#003a66] p-5 flex justify-between items-center text-white">

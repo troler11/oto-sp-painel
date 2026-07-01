@@ -23,6 +23,20 @@ function formatarDataBr(iso: string) {
   return `${d}/${m}/${a}`;
 }
 
+// Cache em memória da lista de médicos por unidade — evita round-trip repetido
+// ao iTSaúde toda vez que o modal abre para a mesma unidade (lista muda raramente).
+const MEDICOS_CACHE_TTL = 5 * 60 * 1000;
+const _medicosCache = new Map<string, { lista: Medico[]; ts: number }>();
+
+async function buscarMedicosComCache(unidade: string, fetchSeguro: Props['fetchSeguro']): Promise<Medico[]> {
+  const cached = _medicosCache.get(unidade);
+  if (cached && Date.now() - cached.ts < MEDICOS_CACHE_TTL) return cached.lista;
+  const r = await fetchSeguro(`${API_URL}/itsaude/medicos?unidade=${encodeURIComponent(unidade)}`);
+  const lista: Medico[] = await r.json();
+  _medicosCache.set(unidade, { lista, ts: Date.now() });
+  return lista;
+}
+
 export default function ScheduleModal({ paciente, medicoInicial, dataInicial, horaInicial, onSubmit, onClose, fetchSeguro }: Props) {
   const unidadeInicial = paciente.unidade && UNIDADES.includes(paciente.unidade) ? paciente.unidade : UNIDADES[0];
 
@@ -44,8 +58,7 @@ export default function ScheduleModal({ paciente, medicoInicial, dataInicial, ho
     setDias([]); setDataSel(''); setHorarios([]); setHoraSel('');
     setErroMedicos(false);
     setCarregando('medicos');
-    fetchSeguro(`${API_URL}/itsaude/medicos?unidade=${encodeURIComponent(unidade)}`)
-      .then(r => r.json())
+    buscarMedicosComCache(unidade, fetchSeguro)
       .then((lista: Medico[]) => {
         setMedicos(lista);
         // Tenta pré-selecionar pelo nome inicial
@@ -110,7 +123,7 @@ export default function ScheduleModal({ paciente, medicoInicial, dataInicial, ho
   const temCpf = Boolean(paciente.cpf_paciente);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-slide-up">
         <div className="bg-gradient-to-r from-[#11caa0] to-[#0e9f7e] p-5 flex justify-between items-center text-white">
           <h2 className="font-extrabold flex items-center gap-2"><CalendarDays size={20} /> Confirmar Consulta</h2>

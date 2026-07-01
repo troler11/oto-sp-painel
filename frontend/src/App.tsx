@@ -97,6 +97,12 @@ export default function App() {
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [buscaDebounced, setBuscaDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(searchTerm), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filtro, subFiltroAgendado, buscaDebounced]);
   const [carregandoDados, setCarregandoDados] = useState(false);
   const [primeiraCarregamento, setPrimeiraCarregamento] = useState(true);
   const [erroAcesso, setErroAcesso] = useState('');
@@ -120,6 +126,13 @@ export default function App() {
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const ultimaMsgDataRef = useRef<string | null>(null);
   const [novaMensagem, setNovaMensagem] = useState('');
+  // Rascunho por paciente: se o atendente trocar de conversa/aba sem enviar, não perde o que digitou
+  useEffect(() => {
+    if (!pacienteAtivoChat?.telefone) return;
+    const key = `otoflow_draft_${pacienteAtivoChat.telefone}`;
+    if (novaMensagem.trim()) localStorage.setItem(key, novaMensagem);
+    else localStorage.removeItem(key);
+  }, [novaMensagem, pacienteAtivoChat?.telefone]);
   const [enviandoMensagem, setEnviandoMensagem] = useState(false);
   const [enviandoMidia, setEnviandoMidia] = useState(false);
   const [digitando, setDigitando] = useState(false);
@@ -146,6 +159,8 @@ export default function App() {
   const [novoUsuarioForm, setNovoUsuarioForm] = useState({ nome: '', usuario: '', senha: '', papel: 'recepcao' });
   const [msgNovoUsuario, setMsgNovoUsuario] = useState({ texto: '', tipo: '' });
 
+  const PAGE_SIZE = 30;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [modalGestaoUsuariosAberto, setModalGestaoUsuariosAberto] = useState(false);
   const [modalWahaAberto, setModalWahaAberto] = useState(false);
   const [modalNovoTicketAberto, setModalNovoTicketAberto] = useState(false);
@@ -395,6 +410,7 @@ export default function App() {
     const bloquearEnvio = isLead ? false : isConcluido;
     setPacienteAtivoChat({ telefone: tel, nome_paciente: isLead ? (paciente as Lead).nome_titular : ag.nome_paciente, bloquearEnvio });
     setChatAberto(true);
+    setNovaMensagem(localStorage.getItem(`otoflow_draft_${tel}`) || '');
     setTelefonesComMsgNova(prev => { const s = new Set(prev); s.delete(tel); return s; });
     try {
       const res = await fetchSeguro(`${API_URL}/chat/${tel}`);
@@ -639,9 +655,11 @@ export default function App() {
   const aplicarFiltros = useCallback(<T extends Agendamento | Lead>(items: T[], isLead = false): T[] => {
     return items.filter(item => {
       const ag = item as Agendamento; const ld = item as Lead;
-      const termo = searchTerm.toLowerCase();
+      const termo = buscaDebounced.toLowerCase();
+      const termoNumerico = termo.replace(/\D/g, '');
       const matchText = (ag.nome_paciente || ld.nome_titular || '').toLowerCase().includes(termo) ||
-        (ag.cpf_paciente || ld.cpf_titular || '').replace(/\D/g, '').includes(termo.replace(/\D/g, ''));
+        (ag.cpf_paciente || ld.cpf_titular || '').replace(/\D/g, '').includes(termoNumerico) ||
+        (termoNumerico.length >= 3 && (ag.telefone || ld.telefone || '').replace(/\D/g, '').includes(termoNumerico));
       if (isLead) return matchText;
       let matchData = true;
       if (dataInicio || dataFim) {
@@ -653,7 +671,7 @@ export default function App() {
       }
       return matchText && matchData;
     });
-  }, [searchTerm, dataInicio, dataFim]);
+  }, [buscaDebounced, dataInicio, dataFim]);
 
   const contagens = useMemo<Record<string, number>>(() => ({
     TRIAGEM: leads.filter(l => l.sessao_intencao !== 'concluido').length,
@@ -813,13 +831,22 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const BotaoCarregarMais = ({ total }: { total: number }) => visibleCount >= total ? null : (
+    <div className="col-span-full flex justify-center py-4">
+      <button onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+        className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold text-sm px-5 py-2.5 rounded-xl transition-colors shadow-sm">
+        Carregar mais ({total - visibleCount} restantes)
+      </button>
+    </div>
+  );
+
   const renderKanban = () => {
     if (filtro === 'TRIAGEM' || filtro === 'LEADS') {
       const isTriage = filtro === 'TRIAGEM';
       const lista = isTriage
         ? filtrosLeads.filter(l => l.sessao_intencao !== 'concluido')
         : listaLeads;
-      return lista.length ? lista.map(lead => (
+      return lista.length ? [...lista.slice(0, visibleCount).map(lead => (
         <div key={lead.id} className={`bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all relative flex flex-col group`}>
           <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
           <div className="flex justify-between items-start mb-3">
@@ -879,7 +906,7 @@ export default function App() {
             )}
           </div>
         </div>
-      )) : (
+      )), <BotaoCarregarMais key="carregar-mais" total={lista.length} />] : (
         <div className="col-span-full py-20 text-center">
           <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">{isTriage ? <Activity size={32} className="text-slate-300" /> : <Target size={32} className="text-slate-300" />}</div>
           <p className="text-slate-500 font-bold">{isTriage ? 'Nenhum fluxo de triagem ativo.' : 'Sem leads para recuperação.'}</p>
@@ -902,11 +929,11 @@ export default function App() {
       </div>
     );
 
-    return lista.map(item => (
+    return [...lista.slice(0, visibleCount).map(item => (
       <SortableCard key={item.id} id={String(item.id)}>
         <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
       </SortableCard>
-    ));
+    )), <BotaoCarregarMais key="carregar-mais" total={lista.length} />];
   };
 
   return (
@@ -981,7 +1008,7 @@ export default function App() {
             )}
 
             {modalNovoTicketAberto && (
-              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setModalNovoTicketAberto(false)}>
+              <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setModalNovoTicketAberto(false)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setModalNovoTicketAberto(false); } }}>
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-slide-up">
                   <div className="flex items-center justify-between mb-5">
                     <div>
@@ -1128,9 +1155,10 @@ export default function App() {
                 </div>
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 pb-10">
-                  {minhasTarefas.map(item => (
+                  {minhasTarefas.slice(0, visibleCount).map(item => (
                     <PatientCard key={item.id} item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
                   ))}
+                  <BotaoCarregarMais total={minhasTarefas.length} />
                 </div>
               )
             ) : (

@@ -13,7 +13,7 @@ interface Props {
 export default function CancelModal({ paciente, motivo, setMotivo, onSubmit, onClose }: Props) {
   const isConsulta = Boolean(paciente.data_consulta);
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-up">
         <div className={`bg-gradient-to-r ${isConsulta ? 'from-red-500 to-red-600' : 'from-slate-500 to-slate-600'} p-5 flex justify-between items-center text-white`}>
           <h2 className="font-extrabold flex items-center gap-2">

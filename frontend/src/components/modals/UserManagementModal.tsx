@@ -18,7 +18,7 @@ export default function UserManagementModal({ usuarios, editandoSenhaId, setEdit
   const { sessao } = useApp();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); setEditandoSenhaId(null); setEditandoUsuarioId(null); } }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
         <div className="bg-[#005088] p-5 flex justify-between items-center text-white shrink-0">
           <h2 className="font-extrabold flex items-center gap-2"><Users size={20} /> Equipe & Acessos</h2>

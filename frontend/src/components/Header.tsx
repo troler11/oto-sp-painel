@@ -39,7 +39,7 @@ export default function Header({ filtro, searchTerm, setSearchTerm, dataInicio, 
           <div className="flex items-center bg-slate-100 px-3 py-2 rounded-xl border border-slate-200 w-64 focus-within:ring-2 focus-within:ring-[#11caa0]/30 focus-within:border-[#11caa0] transition-all">
             <Search size={15} className="text-slate-400 shrink-0" />
             <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-              placeholder="Buscar paciente ou CPF..."
+              placeholder="Buscar paciente, telefone ou CPF..."
               className="bg-transparent border-none outline-none ml-2 text-sm w-full text-slate-700 placeholder-slate-400 font-medium" />
             {searchTerm && <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={14} /></button>}
           </div>

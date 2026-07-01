@@ -15,7 +15,7 @@ interface Props {
 
 export default function TemplateModal({ modelos, editando, form, setForm, onSubmit, onEditar, onRemover, onClose }: Props) {
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4" onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-slide-up">
         <div className="bg-gradient-to-r from-[#11caa0] to-[#0e9f7e] p-5 flex justify-between items-center text-white shrink-0">
           <h2 className="font-extrabold flex items-center gap-2">
