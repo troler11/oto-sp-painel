@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { Agendamento, Contato } from '../../types';
+import type { Agendamento, Contato, Lead } from '../../types';
 import { useApp } from '../../context/AppContext';
-import ConversationListItem from './ConversationListItem';
+import ConversationListItem, { type ConversaItem } from './ConversationListItem';
 
 interface Props {
   itens: Agendamento[]; // já filtrado por busca/período (aplicarFiltros) em App.tsx
+  leadsTriagem: Lead[]; // contatos ainda sem ticket, em conversa ativa com a IA (aplicarFiltros já aplicado)
   contatos: Contato[];
   telefonesComMsgNova: Set<string>;
-  selecionadoId: number | null;
-  onSelecionar: (item: Agendamento) => void;
+  selecionadoTicketId: number | null;
+  selecionadoLeadId: number | null;
+  onSelecionarTicket: (item: Agendamento) => void;
+  onSelecionarLead: (lead: Lead) => void;
 }
 
 const STATUS_OPCOES = [
@@ -31,7 +34,7 @@ const QUICK_FILTROS = [
 
 const PAGE_SIZE = 30;
 
-export default function ConversationList({ itens, contatos, telefonesComMsgNova, selecionadoId, onSelecionar }: Props) {
+export default function ConversationList({ itens, leadsTriagem, contatos, telefonesComMsgNova, selecionadoTicketId, selecionadoLeadId, onSelecionarTicket, onSelecionarLead }: Props) {
   const { sessao } = useApp();
   const [statusFiltro, setStatusFiltro] = useState<typeof STATUS_OPCOES[number]['id']>('TODOS');
   const [quickFiltro, setQuickFiltro] = useState<typeof QUICK_FILTROS[number]['id']>('TODOS');
@@ -40,32 +43,53 @@ export default function ConversationList({ itens, contatos, telefonesComMsgNova,
 
   const statusRoboPorTelefone = useMemo(() => new Map(contatos.map(c => [c.telefone, c.status_robo])), [contatos]);
 
-  const lista = useMemo(() => {
-    let out = itens.filter(a => {
+  const lista = useMemo<ConversaItem[]>(() => {
+    let tickets = itens.filter(a => {
       if (statusFiltro === 'TODOS') return true;
       if (statusFiltro === 'AGENDADO') return a.status_atendimento === 'AGENDADO' || a.status_atendimento === 'CONFIRMADO';
       return a.status_atendimento === statusFiltro;
     });
-    if (quickFiltro === 'MEUS') out = out.filter(a => a.atendente_nome === sessao?.user.nome);
-    if (quickFiltro === 'BOT' || quickFiltro === 'HUMANO') {
-      out = out.filter(a => {
-        const robo = statusRoboPorTelefone.get(a.telefone);
-        return quickFiltro === 'BOT' ? robo === 'Robô' : robo && robo !== 'Robô';
-      });
+    // Leads em triagem (sem ticket) só fazem sentido dentro de "Todos os atendimentos" —
+    // filtrar por status de ticket (Pendente/Agendado/...) não se aplica a eles.
+    let triagem = statusFiltro === 'TODOS' ? leadsTriagem : [];
+
+    if (quickFiltro === 'MEUS') {
+      // "Meus atendimentos" = o que estou atendendo agora, não finalizado/cancelado
+      tickets = tickets.filter(a => a.atendente_nome === sessao?.user.nome && ['EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO'].includes(a.status_atendimento));
+      triagem = [];
+    }
+    if (quickFiltro === 'BOT') {
+      // "IA" = o que está sendo triado/atendido pela IA agora
+      triagem = triagem.filter(l => l.status_robo === 'Robô');
+      tickets = tickets.filter(a => statusRoboPorTelefone.get(a.telefone) === 'Robô');
+    }
+    if (quickFiltro === 'HUMANO') {
+      // "Humano" = o que está pendente para atendimento humano
+      triagem = triagem.filter(l => l.status_robo !== 'Robô');
+      tickets = tickets.filter(a => a.status_atendimento === 'PENDENTE');
     }
     if (quickFiltro === 'URGENTES') {
-      out = out.filter(a => a.status_atendimento === 'PENDENTE' && (Date.now() - new Date(a.data_criacao).getTime()) / 60000 > 60);
+      triagem = [];
+      tickets = tickets.filter(a => a.status_atendimento === 'PENDENTE' && (Date.now() - new Date(a.data_criacao).getTime()) / 60000 > 60);
     }
-    out = [...out].sort((a, b) => {
-      if (statusFiltro === 'PENDENTE') return new Date(a.data_criacao).getTime() - new Date(b.data_criacao).getTime();
-      const da = new Date(a.data_atualizacao || a.data_criacao).getTime();
-      const db = new Date(b.data_atualizacao || b.data_criacao).getTime();
-      return db - da;
-    });
-    return out;
-  }, [itens, statusFiltro, quickFiltro, sessao, statusRoboPorTelefone]);
 
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [statusFiltro, quickFiltro, itens.length]);
+    const combinado: ConversaItem[] = [
+      ...tickets.map((ticket): ConversaItem => ({ tipo: 'ticket', ticket })),
+      ...triagem.map((lead): ConversaItem => ({ tipo: 'triagem', lead })),
+    ];
+
+    combinado.sort((a, b) => {
+      if (statusFiltro === 'PENDENTE' && a.tipo === 'ticket' && b.tipo === 'ticket') {
+        return new Date(a.ticket.data_criacao).getTime() - new Date(b.ticket.data_criacao).getTime();
+      }
+      const ta = a.tipo === 'ticket' ? new Date(a.ticket.data_atualizacao || a.ticket.data_criacao).getTime() : new Date(a.lead.ultima_mensagem).getTime();
+      const tb = b.tipo === 'ticket' ? new Date(b.ticket.data_atualizacao || b.ticket.data_criacao).getTime() : new Date(b.lead.ultima_mensagem).getTime();
+      return tb - ta;
+    });
+    return combinado;
+  }, [itens, leadsTriagem, statusFiltro, quickFiltro, sessao, statusRoboPorTelefone]);
+
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [statusFiltro, quickFiltro, itens.length, leadsTriagem.length]);
 
   const statusLabel = STATUS_OPCOES.find(s => s.id === statusFiltro)?.label;
 
@@ -105,12 +129,17 @@ export default function ConversationList({ itens, contatos, telefonesComMsgNova,
           <div className="p-6 text-center text-slate-400 text-sm">Nenhum atendimento encontrado.</div>
         ) : (
           <>
-            {lista.slice(0, visibleCount).map(item => (
-              <ConversationListItem key={item.id} item={item} selecionado={item.id === selecionadoId}
-                onClick={() => onSelecionar(item)}
-                temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))}
-                statusRobo={statusRoboPorTelefone.get(item.telefone)} />
-            ))}
+            {lista.slice(0, visibleCount).map(item => {
+              const telefone = item.tipo === 'ticket' ? item.ticket.telefone : item.lead.telefone;
+              const chave = item.tipo === 'ticket' ? `ticket-${item.ticket.id}` : `lead-${item.lead.id}`;
+              const selecionado = item.tipo === 'ticket' ? item.ticket.id === selecionadoTicketId : item.lead.id === selecionadoLeadId;
+              return (
+                <ConversationListItem key={chave} item={item} selecionado={selecionado}
+                  onClick={() => item.tipo === 'ticket' ? onSelecionarTicket(item.ticket) : onSelecionarLead(item.lead)}
+                  temMsgNova={telefonesComMsgNova.has(String(telefone).replace(/\D/g, ''))}
+                  statusRobo={item.tipo === 'ticket' ? statusRoboPorTelefone.get(item.ticket.telefone) : undefined} />
+              );
+            })}
             {lista.length > visibleCount && (
               <button onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
                 className="w-full py-3 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">

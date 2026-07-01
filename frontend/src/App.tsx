@@ -129,6 +129,7 @@ export default function App() {
   const [chatAberto, setChatAberto] = useState(false);
   const [pacienteAtivoChat, setPacienteAtivoChat] = useState<PacienteChat | null>(null);
   const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<Agendamento | null>(null);
+  const [leadTriagemSelecionado, setLeadTriagemSelecionado] = useState<Lead | null>(null);
   const [painelPerfilAberto, setPainelPerfilAberto] = useState(false);
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const ultimaMsgDataRef = useRef<string | null>(null);
@@ -326,9 +327,10 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessao]);
 
-  // Poll rápido de leads quando na aba TRIAGEM (sem cache no backend, atualiza em ~10s)
+  // Poll rápido de leads quando na aba ATENDIMENTOS (sem cache no backend, atualiza em ~10s)
+  // — necessário porque leads em triagem (sem ticket) aparecem na caixa unificada
   useEffect(() => {
-    if (!sessao || filtro !== 'TRIAGEM') return;
+    if (!sessao || filtro !== 'ATENDIMENTOS') return;
     const pollLeads = async () => {
       const res = await fetchSeguro(`${API_URL}/leads`);
       if (res.ok && res.headers.get('content-type')?.includes('application/json'))
@@ -344,12 +346,8 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'Escape') { setChatAberto(false); setModalAberto(false); setModalCancelamentoAberto(false); setPacienteTimeline(null); }
       if (e.key === 'r' || e.key === 'R') buscarDados();
-      if (e.key === '1') setFiltro('TRIAGEM');
-      if (e.key === '2') setFiltro('PENDENTE');
-      if (e.key === '3') setFiltro('EM ATENDIMENTO');
-      if (e.key === '4') setFiltro('AGENDADO');
-      if (e.key === '5') setFiltro('FINALIZADO');
-      if (e.key === '6') setFiltro('CANCELADO');
+      if (e.key === '1') setFiltro('ATENDIMENTOS');
+      if (e.key === '2') setFiltro('LEADS');
       if (e.key === 'd' || e.key === 'D') setFiltro('RELATORIOS');
     };
     window.addEventListener('keydown', handler);
@@ -359,9 +357,9 @@ export default function App() {
 
   // Sidebar actions
   useEffect(() => {
-    if (filtro === '__modelos') { setModalModelosAberto(true); setFiltro('TRIAGEM'); }
-    if (filtro === '__novo_usuario') { setModalNovoUsuarioAberto(true); setFiltro('TRIAGEM'); }
-    if (filtro === '__equipe') { abrirGestaoUsuarios(); setFiltro('TRIAGEM'); }
+    if (filtro === '__modelos') { setModalModelosAberto(true); setFiltro('ATENDIMENTOS'); }
+    if (filtro === '__novo_usuario') { setModalNovoUsuarioAberto(true); setFiltro('ATENDIMENTOS'); }
+    if (filtro === '__equipe') { abrirGestaoUsuarios(); setFiltro('ATENDIMENTOS'); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtro]);
 
@@ -506,7 +504,14 @@ export default function App() {
 
   const abrirConversa = useCallback((item: Agendamento) => {
     setAgendamentoSelecionado(item);
+    setLeadTriagemSelecionado(null);
     carregarChat(item, false);
+  }, [carregarChat]);
+
+  const abrirConversaLead = useCallback((lead: Lead) => {
+    setLeadTriagemSelecionado(lead);
+    setAgendamentoSelecionado(null);
+    carregarChat(lead, true);
   }, [carregarChat]);
 
   const salvarObservacoes = useCallback(async (id: number, observacoes: string) => {
@@ -526,7 +531,11 @@ export default function App() {
     if (!ok) return;
     try {
       const res = await fetchSeguro(`${API_URL}/leads/${id}`, { method: 'DELETE' });
-      if (res.ok) { setLeads(prev => prev.filter(l => l.id !== id)); toast('Contacto removido.', 'sucesso'); }
+      if (res.ok) {
+        setLeads(prev => prev.filter(l => l.id !== id));
+        setLeadTriagemSelecionado(prev => prev?.id === id ? null : prev);
+        toast('Contacto removido.', 'sucesso');
+      }
     } catch (e) { toast('Erro ao descartar.', 'erro'); }
   };
 
@@ -535,7 +544,12 @@ export default function App() {
     if (!ok) return;
     try {
       const res = await fetchSeguro(`${API_URL}/leads/${lead.id}/converter`, { method: 'POST' });
-      if (res.ok) { setLeads(prev => prev.filter(l => l.id !== lead.id)); buscarDados(); toast('Ficha criada com sucesso!', 'sucesso'); adicionarNotificacao('Ficha criada!', 'sucesso'); }
+      if (res.ok) {
+        setLeads(prev => prev.filter(l => l.id !== lead.id));
+        setLeadTriagemSelecionado(prev => prev?.id === lead.id ? null : prev);
+        buscarDados();
+        toast('Ficha criada com sucesso!', 'sucesso'); adicionarNotificacao('Ficha criada!', 'sucesso');
+      }
       else { const d = await res.json(); toast(d.erro || 'Falha ao converter.', 'erro'); }
     } catch (e) { toast('Erro de conexão.', 'erro'); }
   };
@@ -552,7 +566,7 @@ export default function App() {
         setModalNovoTicketAberto(false);
         setNovoTicketForm({ nome: '', telefone: '' });
         await buscarDados();
-        setFiltro('PENDENTE');
+        setFiltro('ATENDIMENTOS');
         toast('Ticket criado!', 'sucesso');
       } else { const d = await res.json().catch(() => ({})); toast(d.erro || 'Falha ao criar ticket.', 'erro'); }
     } catch { toast('Erro de conexão.', 'erro'); }
@@ -771,6 +785,8 @@ export default function App() {
 
   const filtrosLeads = useMemo(() => aplicarFiltros(leads, true), [aplicarFiltros, leads]);
   const filtrosAg = useMemo(() => aplicarFiltros(agendamentos), [aplicarFiltros, agendamentos]);
+  // Contatos ainda em conversa com a IA (sem ticket) — aparecem dentro da caixa unificada "Atendimentos"
+  const leadsTriagem = useMemo(() => filtrosLeads.filter(l => l.sessao_intencao !== 'concluido'), [filtrosLeads]);
 
   const listaLeads = useMemo(() => contatos
     .filter(c => c.status_robo !== 'Bloqueado')
@@ -885,14 +901,11 @@ export default function App() {
   );
 
   const renderKanban = () => {
-    if (filtro === 'TRIAGEM' || filtro === 'LEADS') {
-      const isTriage = filtro === 'TRIAGEM';
-      const lista = isTriage
-        ? filtrosLeads.filter(l => l.sessao_intencao !== 'concluido')
-        : listaLeads;
+    if (filtro === 'LEADS') {
+      const lista = listaLeads;
       return lista.length ? [...lista.slice(0, visibleCount).map(lead => (
-        <div key={lead.id} className={`bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all relative flex flex-col group`}>
-          <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${isTriage ? 'bg-gradient-to-b from-[#11caa0] to-[#0e9f7e]' : 'bg-gradient-to-b from-purple-500 to-purple-600'}`} />
+        <div key={lead.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-xl hover:-translate-y-1 transition-all relative flex flex-col group">
+          <div className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl bg-gradient-to-b from-purple-500 to-purple-600" />
           <div className="flex justify-between items-start mb-3">
             <div className="flex items-center gap-2.5">
               <ProfileAvatar telefone={lead.telefone} nome={lead.nome_titular || lead.nome_atendimento || lead.telefone} />
@@ -922,39 +935,22 @@ export default function App() {
                   </div>
                 )}
                 {(lead.nome_atendimento || lead.nome_titular) && <p className="text-[10px] text-slate-400 font-semibold">{lead.telefone}</p>}
-                {!isTriage && lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
+                {lead.cpf_titular && <p className="text-[10px] text-slate-400 font-semibold">CPF: {lead.cpf_titular}</p>}
                 <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{tempoAtras(lead.ultima_mensagem)}</p>
                 <div className="mt-1"><LeadClassificacaoBadge leadId={lead.id} /></div>
               </div>
             </div>
-            {isTriage && <span className={`px-2 py-1 rounded-lg text-[9px] font-extrabold uppercase tracking-wider ${lead.status_robo === 'Robô' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-orange-100 text-orange-700 border border-orange-200'}`}>{lead.status_robo === 'Robô' ? '🤖 Bot' : '👤 Pausado'}</span>}
           </div>
           <div className="mt-auto pt-3 border-t border-slate-100 flex flex-col gap-2">
-            <button onClick={() => carregarChat(lead, true)} className={`w-full ${isTriage ? 'bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700' : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700'} py-2.5 rounded-xl flex justify-center items-center gap-2 transition-colors font-bold text-xs`}>
-              <MessageSquare size={15} /> {isTriage ? 'Ver Conversa' : 'Iniciar Resgate'}
+            <button onClick={() => carregarChat(lead, true)} className="w-full bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 py-2.5 rounded-xl flex justify-center items-center gap-2 transition-colors font-bold text-xs">
+              <MessageSquare size={15} /> Iniciar Resgate
             </button>
-            {isTriage && lead.status_robo === 'Robô' && (
-              <button onClick={() => interromperRobo(lead.telefone)} className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2.5 rounded-xl flex justify-center items-center gap-2 font-bold text-xs shadow-sm transition-colors">
-                <XCircle size={15} /> Pausar Bot & Assumir
-              </button>
-            )}
-            {isTriage && lead.status_robo !== 'Robô' && (
-              <div className="flex gap-2">
-                <button onClick={() => converterParaPendente(lead)} className="flex-[2] bg-gradient-to-r from-[#005088] to-[#003a66] text-white py-2.5 rounded-xl flex justify-center items-center gap-1.5 font-bold text-xs shadow-sm hover:opacity-90 transition-opacity">
-                  <ArrowRight size={13} /> Criar Ficha
-                </button>
-                <button onClick={() => descartarLead(lead.id)} className="flex-1 bg-white border border-red-200 text-red-500 hover:bg-red-50 py-2.5 rounded-xl flex justify-center transition-colors font-bold">
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )), <BotaoCarregarMais key="carregar-mais" total={lista.length} />] : (
         <div className="col-span-full py-20 text-center">
-          <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">{isTriage ? <Activity size={32} className="text-slate-300" /> : <Target size={32} className="text-slate-300" />}</div>
-          <p className="text-slate-500 font-bold">{isTriage ? 'Nenhum fluxo de triagem ativo.' : 'Sem leads para recuperação.'}</p>
-          {isTriage && <p className="text-slate-400 text-sm mt-1">As conversas do bot aparecem aqui.</p>}
+          <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><Target size={32} className="text-slate-300" /></div>
+          <p className="text-slate-500 font-bold">Sem leads para recuperação.</p>
         </div>
       );
     }
@@ -997,15 +993,6 @@ export default function App() {
           <Header filtro={filtro} searchTerm={searchTerm} setSearchTerm={setSearchTerm} dataInicio={dataInicio} setDataInicio={setDataInicio} dataFim={dataFim} setDataFim={setDataFim} carregandoDados={carregandoDados} buscarDados={buscarDados} notificacoes={notificacoes} setNotificacoes={setNotificacoes} painelNotifAberto={painelNotifAberto} setPainelNotifAberto={setPainelNotifAberto} densidade={densidade} setDensidade={setDensidade} />
 
           <div className={filtro === 'ATENDIMENTOS' ? 'flex-1 flex flex-col overflow-hidden' : 'flex-1 overflow-y-auto p-6 custom-scrollbar'}>
-            {filtro === 'TRIAGEM' && (
-              <div className="flex items-center justify-end gap-3 mb-6">
-                <button onClick={() => setModalNovoTicketAberto(true)}
-                  className="flex items-center gap-2 bg-[#11caa0] hover:bg-[#0fb38a] text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm shrink-0">
-                  <UserPlus size={15} /> Novo Ticket
-                </button>
-              </div>
-            )}
-
             {modalNovoTicketAberto && (
               <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setModalNovoTicketAberto(false)} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setModalNovoTicketAberto(false); } }}>
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-slide-up">
@@ -1155,15 +1142,17 @@ export default function App() {
                   </button>
                 </div>
                 <div className="flex-1 flex overflow-hidden">
-                  <ConversationList itens={filtrosAg} contatos={contatos} telefonesComMsgNova={telefonesComMsgNova}
-                    selecionadoId={agendamentoSelecionado?.id ?? null} onSelecionar={abrirConversa} />
-                  {chatAberto && pacienteAtivoChat && agendamentoSelecionado ? (
+                  <ConversationList itens={filtrosAg} leadsTriagem={leadsTriagem} contatos={contatos} telefonesComMsgNova={telefonesComMsgNova}
+                    selecionadoTicketId={agendamentoSelecionado?.id ?? null} selecionadoLeadId={leadTriagemSelecionado?.id ?? null}
+                    onSelecionarTicket={abrirConversa} onSelecionarLead={abrirConversaLead} />
+                  {chatAberto && pacienteAtivoChat && (agendamentoSelecionado || leadTriagemSelecionado) ? (
                     <ChatPanel pacienteAtivoChat={pacienteAtivoChat} mensagens={mensagens} novaMensagem={novaMensagem} setNovaMensagem={setNovaMensagem} enviandoMensagem={enviandoMensagem} digitando={digitando} modelos={modelos} dropdownModelosAberto={dropdownModelosAberto} setDropdownModelosAberto={setDropdownModelosAberto}
-                      onClose={() => { setChatAberto(false); setAgendamentoSelecionado(null); setDropdownModelosAberto(false); }}
+                      onClose={() => { setChatAberto(false); setAgendamentoSelecionado(null); setLeadTriagemSelecionado(null); setDropdownModelosAberto(false); }}
                       onEnviar={enviarMensagemChat} onEnviarMidia={enviarMidiaChat} enviandoMidia={enviandoMidia}
                       onInterromperRobo={interromperRobo} onReativarRobo={reativarRobo}
                       onAbrirModelos={() => { setModalModelosAberto(true); setDropdownModelosAberto(false); }} onEditarModelo={abrirEdicaoModelo} onRemoverModelo={removerModelo}
                       agendamento={agendamentoSelecionado} onAssumir={assumirAtendimento} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento}
+                      leadTriagem={leadTriagemSelecionado} onCriarFicha={converterParaPendente} onDescartarLead={descartarLead}
                       perfilAberto={painelPerfilAberto} onTogglePerfil={() => setPainelPerfilAberto(v => !v)} />
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-slate-400 text-sm font-semibold bg-slate-50">

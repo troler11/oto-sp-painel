@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Inbox, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi, Users } from 'lucide-react';
+import { Inbox, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getAvatarCor } from '../utils/helpers';
 
@@ -17,7 +17,6 @@ interface Props {
 
 const ABAS_NAV = [
   { id: 'ATENDIMENTOS', icon: <Inbox size={17} />, label: 'Atendimentos' },
-  { id: 'TRIAGEM', icon: <Activity size={17} />, label: 'Triagem' },
 ] as const;
 
 export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, fazerLogout, setModalModelosAberto, setModalNovoUsuarioAberto, abrirGestaoUsuarios, setModalWahaAberto }: Props) {
@@ -77,7 +76,7 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
         {!colapsada && <p className="px-3 text-[10px] font-extrabold text-slate-600 uppercase tracking-widest mb-2">Operacional</p>}
         {ABAS_NAV.map(item => (
           <NavBtn key={item.id} id={item.id} icon={item.icon} label={item.label}
-            badge={item.id === 'ATENDIMENTOS' ? (contagens.PENDENTE ?? 0) + (contagens['EM ATENDIMENTO'] ?? 0) + (contagens.AGENDADO ?? 0) : contagens[item.id]} />
+            badge={item.id === 'ATENDIMENTOS' ? (contagens.PENDENTE ?? 0) + (contagens['EM ATENDIMENTO'] ?? 0) + (contagens.AGENDADO ?? 0) + (contagens.TRIAGEM ?? 0) : contagens[item.id]} />
         ))}
 
         {!colapsada && <div className="pt-4 pb-1"><p className="px-3 text-[10px] font-extrabold text-slate-600 uppercase tracking-widest mb-2">Análise</p></div>}

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip, CheckCircle2, CalendarDays, Bot, Lock, PanelRight } from 'lucide-react';
-import type { Agendamento, ModeloMensagem, MensagemChat, PacienteChat } from '../types';
+import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip, CheckCircle2, CalendarDays, Bot, Lock, PanelRight, ArrowRight, User } from 'lucide-react';
+import type { Agendamento, ModeloMensagem, MensagemChat, PacienteChat, Lead } from '../types';
 import { useApp } from '../context/AppContext';
 import { useProfilePic } from '../hooks/useProfilePic';
 import { AcoesMenu } from './PatientCard';
@@ -127,9 +127,13 @@ interface Props {
   // Painel de dados do paciente (Perfil/Histórico/Agendamentos/Observações) — fica escondido por padrão
   perfilAberto?: boolean;
   onTogglePerfil?: () => void;
+  // Lead ainda em triagem com a IA (sem ticket) — mutuamente exclusivo com `agendamento`
+  leadTriagem?: Lead | null;
+  onCriarFicha?: (lead: Lead) => void;
+  onDescartarLead?: (id: number) => void;
 }
 
-export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onEnviarMidia, enviandoMidia, onInterromperRobo, onReativarRobo, onAbrirModelos, onEditarModelo, onRemoverModelo, agendamento, onAssumir, onAgendar, onCancelar, onDevolver, onFinalizar, perfilAberto, onTogglePerfil }: Props) {
+export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onEnviarMidia, enviandoMidia, onInterromperRobo, onReativarRobo, onAbrirModelos, onEditarModelo, onRemoverModelo, agendamento, onAssumir, onAgendar, onCancelar, onDevolver, onFinalizar, perfilAberto, onTogglePerfil, leadTriagem, onCriarFicha, onDescartarLead }: Props) {
   const { sessao } = useApp();
   const podeEditar = !agendamento || ['AGENDADO', 'CONFIRMADO', 'EM ATENDIMENTO'].includes(agendamento.status_atendimento) || sessao?.user.nome === agendamento.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -195,7 +199,7 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
               <Bot size={13} /> Reativar Bot
             </button>
           )}
-          {onTogglePerfil && (
+          {onTogglePerfil && agendamento && (
             <button onClick={onTogglePerfil} title={perfilAberto ? 'Esconder dados do paciente' : 'Mostrar dados do paciente'}
               className={`p-2 rounded-xl transition-colors ${perfilAberto ? 'bg-white/25' : 'hover:bg-white/15'}`}>
               <PanelRight size={18} />
@@ -251,7 +255,38 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
         </div>
       )}
 
+      {leadTriagem && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200 shrink-0 overflow-x-auto scrollbar-hide">
+          {leadTriagem.status_robo === 'Robô' ? (
+            <span className="text-xs font-bold text-blue-600 flex items-center gap-1.5"><Bot size={14} /> Conversando com a IA — ainda sem ficha de atendimento</span>
+          ) : (
+            <>
+              <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5 mr-auto shrink-0"><User size={14} /> Triagem pausada — aguardando decisão</span>
+              {onCriarFicha && (
+                <button onClick={() => onCriarFicha(leadTriagem)}
+                  className="bg-gradient-to-r from-[#005088] to-[#003a66] text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:opacity-90 transition-all shrink-0 flex items-center gap-1.5">
+                  <ArrowRight size={13} /> Criar Ficha
+                </button>
+              )}
+              {onDescartarLead && (
+                <button onClick={() => onDescartarLead(leadTriagem.id)}
+                  className="bg-white border border-red-200 text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors shrink-0" title="Descartar contacto">
+                  <Trash2 size={14} />
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
+        {leadTriagem && leadTriagem.status_robo === 'Robô' && (
+          <div className="flex justify-center">
+            <span className="bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1.5">
+              <Bot size={12} /> Conversando com a IA
+            </span>
+          </div>
+        )}
         {mensagensVisiveis.map(({ msg, textoFinal }, i) => {
           const dataAtual = new Date(msg.data);
           const dataAnterior = i > 0 ? new Date(mensagensVisiveis[i - 1].msg.data) : null;

@@ -23,7 +23,7 @@ const TITULO: Record<string, string> = {
   ATENDIMENTOS: 'Atendimentos',
 };
 
-const ABAS_COM_CARDS = ['TRIAGEM', 'LEADS'];
+const ABAS_COM_CARDS = ['LEADS'];
 
 export default function Header({ filtro, searchTerm, setSearchTerm, dataInicio, setDataInicio, dataFim, setDataFim, carregandoDados, buscarDados, notificacoes, setNotificacoes, painelNotifAberto, setPainelNotifAberto, densidade, setDensidade }: Props) {
   const naoLidas = notificacoes.filter(n => !n.lida).length;
