@@ -27,6 +27,7 @@ const STATUS_OPCOES = [
 const QUICK_FILTROS = [
   { id: 'TODOS', label: 'Todos' },
   { id: 'MEUS', label: 'Meus atendimentos' },
+  { id: 'EM_ATENDIMENTO_TODOS', label: 'Em Atendimento (Todos)' },
   { id: 'BOT', label: 'IA' },
   { id: 'HUMANO', label: 'Humano' },
   { id: 'URGENTES', label: 'Urgentes' },
@@ -56,6 +57,12 @@ export default function ConversationList({ itens, leadsTriagem, contatos, telefo
     if (quickFiltro === 'MEUS') {
       // "Meus atendimentos" = o que estou atendendo agora, não finalizado/cancelado
       tickets = tickets.filter(a => a.atendente_nome === sessao?.user.nome && ['EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO'].includes(a.status_atendimento));
+      triagem = [];
+    }
+    if (quickFiltro === 'EM_ATENDIMENTO_TODOS') {
+      // Visão de qualquer atendente sobre todo mundo que está em atendimento — para cobrir
+      // uns aos outros quando necessário, não só o que cada um assumiu para si
+      tickets = tickets.filter(a => a.status_atendimento === 'EM ATENDIMENTO');
       triagem = [];
     }
     if (quickFiltro === 'BOT') {
