@@ -7,12 +7,15 @@ interface Props { agendamentos: Agendamento[]; leads: Lead[]; contatos: Lead[]; 
 // Calculado inteiramente no cliente a partir de dados já carregados — sem chamada
 // nova ao backend (ver limitações da Fase 1 no plano: "mensagens hoje" fica de fora
 // por exigir COUNT em chat_limpo).
-export default function KpiBar({ agendamentos, leads, contatos }: Props) {
+export default function KpiBar({ agendamentos, leads, contatos: _contatos }: Props) {
   const kpis = useMemo(() => {
     const fila = agendamentos.filter(a => a.status_atendimento === 'PENDENTE').length;
     const emAtendimento = agendamentos.filter(a => a.status_atendimento === 'EM ATENDIMENTO').length;
     const agendados = agendamentos.filter(a => a.status_atendimento === 'AGENDADO' || a.status_atendimento === 'CONFIRMADO').length;
-    const iaRespondendo = contatos.filter(c => c.status_robo === 'Robô').length;
+    // Só conta triagem real (contato sem ticket, em conversa ativa com o bot) — não usa
+    // status_robo de `contatos` porque ele é resetado para 'Robô' ao finalizar/cancelar/
+    // agendar um ticket, o que infla essa contagem com atendimentos já encerrados.
+    const iaRespondendo = leads.filter(l => l.sessao_intencao !== 'concluido' && l.status_robo === 'Robô').length;
     const semResposta = agendamentos.filter(a => a.status_atendimento === 'PENDENTE' && (Date.now() - new Date(a.data_criacao).getTime()) / 60000 > 60).length;
 
     let totalEsperaMs = 0, itensComEspera = 0;
@@ -25,7 +28,7 @@ export default function KpiBar({ agendamentos, leads, contatos }: Props) {
     const tempoMedioMin = itensComEspera > 0 ? Math.round((totalEsperaMs / itensComEspera) / 60000) : 0;
 
     return { fila, emAtendimento, agendados, iaRespondendo, semResposta, tempoMedioMin, novosLeads: leads.length };
-  }, [agendamentos, leads, contatos]);
+  }, [agendamentos, leads]);
 
   const itens = [
     { label: 'Fila Atual', valor: kpis.fila, icon: <Clock size={16} />, cor: 'text-amber-600 bg-amber-50' },
