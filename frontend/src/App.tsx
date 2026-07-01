@@ -768,8 +768,11 @@ export default function App() {
       // nome_titular vazio (sem CPF confirmado ainda) e só o nome_atendimento (o que o
       // paciente disse pro bot) preenchido, que é justamente o nome exibido na lista.
       const nomes = [ag.nome_paciente, ag.nome_titular, ld.nome_atendimento].filter((v): v is string => !!v);
+      // termoNumerico só é confiável quando tem dígitos de verdade — sem essa trava,
+      // uma busca por nome (só letras) zera termoNumerico e '' .includes('') dá sempre
+      // true, fazendo o CPF "casar" com qualquer coisa e a lista inteira aparecer sem filtrar.
       const matchText = nomes.some(n => n.toLowerCase().includes(termo)) ||
-        (ag.cpf_paciente || ld.cpf_titular || '').replace(/\D/g, '').includes(termoNumerico) ||
+        (termoNumerico.length >= 3 && (ag.cpf_paciente || ld.cpf_titular || '').replace(/\D/g, '').includes(termoNumerico)) ||
         (termoNumerico.length >= 3 && (ag.telefone || ld.telefone || '').replace(/\D/g, '').includes(termoNumerico));
       if (isLead) return matchText;
       let matchData = true;
