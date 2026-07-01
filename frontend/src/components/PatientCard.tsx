@@ -63,18 +63,21 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
   const medicoExibir = MEDICO_IGNORAR.includes(medicoRaw.toLowerCase()) ? '' : medicoRaw;
   const urgencia = getUrgencia(item.data_criacao);
   const isPendente = item.status_atendimento === 'PENDENTE';
-  const timerVivo = useTimerVivo(item.data_criacao, isPendente);
+  const emAndamento = ['EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO'].includes(item.status_atendimento);
+  const dataParado = item.data_atualizacao || item.data_criacao;
+  const urgenciaParado = getUrgencia(dataParado);
+  const timerVivo = useTimerVivo(isPendente ? item.data_criacao : dataParado, isPendente || emAndamento);
   const avatarCor = getAvatarCor(item.nome_paciente);
   const fotoPerfil = useProfilePic(item.telefone);
   const [fotoErro, setFotoErro] = useState(false);
 
   const corBorda = isPendente
-    ? urgencia === 'alta' ? 'border-red-300 shadow-red-50' : urgencia === 'media' ? 'border-amber-200' : 'border-slate-200'
+    ? urgencia === 'critica' ? 'border-red-500 ring-2 ring-red-400 ring-offset-1 shadow-red-100' : urgencia === 'alta' ? 'border-red-300 shadow-red-50' : urgencia === 'media' ? 'border-amber-200' : 'border-slate-200'
     : 'border-slate-200';
 
   const isDescartado = item.status_atendimento === 'CANCELADO' && !item.data_consulta;
   const corBarra = isPendente
-    ? urgencia === 'alta' ? 'bg-gradient-to-b from-red-500 to-orange-500' : urgencia === 'media' ? 'bg-amber-400' : 'bg-amber-300'
+    ? urgencia === 'critica' ? 'bg-gradient-to-b from-red-600 to-red-500 animate-pulse' : urgencia === 'alta' ? 'bg-gradient-to-b from-red-500 to-orange-500' : urgencia === 'media' ? 'bg-amber-400' : 'bg-amber-300'
     : item.status_atendimento === 'EM ATENDIMENTO' ? 'bg-gradient-to-b from-amber-400 to-orange-400 animate-pulse'
     : item.status_atendimento === 'AGENDADO' ? 'bg-gradient-to-b from-emerald-500 to-teal-500'
     : item.status_atendimento === 'CONFIRMADO' ? 'bg-gradient-to-b from-violet-500 to-violet-600'
@@ -127,7 +130,7 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
         </div>
         <div className="flex items-center gap-1 shrink-0 ml-2">
           {isPendente && urgencia !== 'normal' && (
-            <Flame size={15} className={urgencia === 'alta' ? 'text-red-500 animate-pulse' : 'text-amber-400'} />
+            <Flame size={urgencia === 'critica' ? 18 : 15} className={urgencia === 'critica' || urgencia === 'alta' ? 'text-red-500 animate-pulse' : 'text-amber-400'} />
           )}
           <button onClick={() => onTimeline(item)}
             className="p-1.5 text-slate-300 hover:text-[#005088] hover:bg-slate-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
@@ -138,10 +141,15 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
       </div>
 
       {/* Timer ao vivo */}
-      {isPendente && (
-        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgencia === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgencia === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
-          <Clock size={11} className={urgencia === 'alta' ? 'animate-pulse' : ''} />
-          {timerVivo} na fila
+      {isPendente ? (
+        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgencia === 'critica' ? 'bg-red-100 text-red-700 border border-red-300 animate-pulse' : urgencia === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgencia === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+          <Clock size={11} className={urgencia === 'critica' || urgencia === 'alta' ? 'animate-pulse' : ''} />
+          {timerVivo} na fila{urgencia === 'critica' ? ' — aguardando há muito tempo ⚠️' : ''}
+        </div>
+      ) : emAndamento && (
+        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgenciaParado === 'critica' || urgenciaParado === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgenciaParado === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+          <Clock size={11} />
+          {timerVivo} {item.status_atendimento === 'EM ATENDIMENTO' ? 'em atendimento' : item.status_atendimento === 'AGENDADO' ? 'aguardando consulta' : 'confirmado, aguardando consulta'}
         </div>
       )}
 

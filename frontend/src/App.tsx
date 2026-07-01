@@ -169,7 +169,6 @@ export default function App() {
   const classificacoesRefrescadasRef = useRef<Set<number>>(new Set());
 
   // ── Effects ───────────────────────────────────────────────────
-  useEffect(() => { document.title = 'OtoFlow CRM | Gestão de Atendimentos'; }, []);
   useEffect(() => { pacienteAtivoChatRef.current = pacienteAtivoChat; }, [pacienteAtivoChat]);
 
   // Mantém ref com o timestamp da última mensagem (evita closure stale no poll)
@@ -649,6 +648,11 @@ export default function App() {
     CANCELADO: agendamentos.filter(a => a.status_atendimento === 'CANCELADO').length,
   }), [leads, agendamentos]);
 
+  useEffect(() => {
+    const pendentes = contagens.PENDENTE ?? 0;
+    document.title = pendentes > 0 ? `(${pendentes}) OtoFlow CRM | Gestão de Atendimentos` : 'OtoFlow CRM | Gestão de Atendimentos';
+  }, [contagens]);
+
   const filtrosLeads = useMemo(() => aplicarFiltros(leads, true), [aplicarFiltros, leads]);
   const filtrosAg = useMemo(() => aplicarFiltros(agendamentos), [aplicarFiltros, agendamentos]);
   const listaLeads = useMemo(() => contatos
@@ -734,6 +738,15 @@ export default function App() {
 
   // ── App autenticado ───────────────────────────────────────────
   const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO', 'FINALIZADO', 'CANCELADO'] as const;
+  const ABAS_DESCRICAO: Record<typeof ABAS[number], string> = {
+    TRIAGEM: 'Contatos que mandaram mensagem e ainda não têm ficha aberta',
+    PENDENTE: 'Fichas abertas aguardando um atendente assumir',
+    'EM ATENDIMENTO': 'Atendente já assumiu e está coletando dados do paciente',
+    AGENDADO: 'Consulta marcada, aguardando a data chegar',
+    CONFIRMADO: 'Paciente confirmou presença, consulta ainda vai acontecer',
+    FINALIZADO: 'Atendimento concluído — nada pendente aqui',
+    CANCELADO: 'Consulta cancelada ou ticket descartado sem agendamento',
+  };
 
   const exportarLeadsCSV = () => {
     const BOM = '﻿';
@@ -890,7 +903,7 @@ export default function App() {
               <div className="flex items-center gap-3 mb-6">
                 <div className="flex-1 flex gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto scrollbar-hide">
                   {ABAS.map(aba => (
-                    <button key={aba} onClick={() => setFiltro(aba)}
+                    <button key={aba} onClick={() => setFiltro(aba)} title={ABAS_DESCRICAO[aba]}
                       className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs transition-all whitespace-nowrap ${filtro === aba ? 'bg-[#005088] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
                       {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'CONFIRMADO' ? 'Confirmados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
                       {(contagens[aba] ?? 0) > 0 && <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filtro === aba ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagens[aba]}</span>}

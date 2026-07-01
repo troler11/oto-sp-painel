@@ -21,8 +21,9 @@ export const tempoAtras = (iso?: string) => {
   return formatarDataBr(iso);
 };
 
-export const getUrgencia = (data_criacao: string): 'alta' | 'media' | 'normal' => {
+export const getUrgencia = (data_criacao: string): 'critica' | 'alta' | 'media' | 'normal' => {
   const diff = (Date.now() - new Date(data_criacao).getTime()) / 60000;
+  if (diff > 120) return 'critica';
   if (diff > 60) return 'alta';
   if (diff > 30) return 'media';
   return 'normal';
