@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Inbox, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi, Users } from 'lucide-react';
+import { Inbox, Target, BarChart3, FileText, UserPlus, ShieldCheck, ChevronLeft, ChevronRight, ChevronDown, Wifi, Users } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getAvatarCor } from '../utils/helpers';
+
+const PAPEL_LABEL: Record<string, string> = { admin: 'Administrador', gerente: 'Gerente', recepcao: 'Recepção' };
 
 interface Props {
   filtro: string;
@@ -29,11 +31,11 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
     const ativo = filtro === id;
     return (
       <button onClick={() => setFiltro(id)} title={colapsada ? label : undefined}
-        className={`w-full flex items-center ${colapsada ? 'justify-center' : 'justify-between'} gap-2.5 px-3 py-2.5 rounded-xl font-semibold text-sm transition-all relative group ${ativo ? 'bg-[#11caa0]/20 text-[#11caa0] font-bold shadow-[inset_2px_0_0_#11caa0]' : 'hover:bg-slate-800/80 hover:text-slate-200'}`}>
+        className={`w-full flex items-center ${colapsada ? 'justify-center' : 'justify-between'} gap-2.5 px-3 py-2.5 rounded-xl font-semibold text-sm transition-all relative group ${ativo ? 'bg-[#005088] text-white font-bold shadow-sm' : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'}`}>
         <span className={`flex items-center ${colapsada ? '' : 'gap-2.5'}`}>{icon}</span>
         {!colapsada && <span className="flex-1 text-left truncate">{label}</span>}
         {!colapsada && badge !== undefined && badge > 0 && (
-          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${ativo ? 'bg-[#11caa0] text-white' : 'bg-slate-700 text-slate-300'}`}>{badge}</span>
+          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${ativo ? 'bg-white/20 text-white' : 'bg-slate-700 text-slate-300'}`}>{badge}</span>
         )}
         {colapsada && badge !== undefined && badge > 0 && (
           <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">{badge > 9 ? '9+' : badge}</span>
@@ -50,10 +52,10 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
   return (
     <aside className={`${colapsada ? 'w-[68px]' : 'w-64'} bg-gradient-to-b from-slate-900 via-slate-900 to-slate-800 text-slate-400 flex flex-col shrink-0 z-30 transition-all duration-300 relative`}>
       {/* Logo */}
-      <div className="h-[72px] flex items-center justify-center px-4 border-b border-slate-800 bg-white shrink-0 overflow-hidden">
+      <div className={`h-[72px] flex items-center ${colapsada ? 'justify-center px-2' : 'px-4'} shrink-0 overflow-hidden`}>
         {colapsada
           ? <div className="w-9 h-9 bg-gradient-to-br from-[#11caa0] to-[#005088] rounded-xl flex items-center justify-center font-extrabold text-white text-sm">O</div>
-          : <img src="/logo.png" alt="Otoflow" className="h-11 object-contain" />
+          : <div className="bg-white rounded-xl px-3 py-2 shadow-sm"><img src="/logo.png" alt="Otoflow" className="h-8 object-contain" /></div>
         }
       </div>
 
@@ -64,7 +66,7 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
       </button>
 
       {/* Status */}
-      <div className={`px-4 py-3 border-b border-slate-800 ${colapsada ? 'flex justify-center' : ''}`}>
+      <div className={`px-4 pb-3 ${colapsada ? 'flex justify-center' : ''}`}>
         <div className={`flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-wider ${erroAcesso ? 'text-red-400' : 'text-emerald-400'}`}>
           <div className={`w-2 h-2 rounded-full shrink-0 ${erroAcesso ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
           {!colapsada && (erroAcesso ? 'API Offline' : 'Sistema Online')}
@@ -72,8 +74,8 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto custom-scrollbar">
-        {!colapsada && <p className="px-3 text-[10px] font-extrabold text-slate-600 uppercase tracking-widest mb-2">Operacional</p>}
+      <nav className="flex-1 px-2 py-2 space-y-0.5 overflow-y-auto custom-scrollbar border-t border-slate-800/80">
+        {!colapsada && <p className="px-3 pt-3 text-[10px] font-extrabold text-slate-600 uppercase tracking-widest mb-2">Atendimento</p>}
         {ABAS_NAV.map(item => (
           <NavBtn key={item.id} id={item.id} icon={item.icon} label={item.label}
             badge={item.id === 'ATENDIMENTOS' ? (contagens.PENDENTE ?? 0) + (contagens['EM ATENDIMENTO'] ?? 0) + (contagens.AGENDADO ?? 0) + (contagens.TRIAGEM ?? 0) : contagens[item.id]} />
@@ -110,18 +112,19 @@ export default function Sidebar({ filtro, setFiltro, contagens, erroAcesso, faze
 
       {/* Perfil */}
       <div className="p-2 border-t border-slate-800 shrink-0">
-        <div onClick={fazerLogout} title={colapsada ? `${sessao?.user.nome} · Sair` : undefined}
-          className={`flex items-center ${colapsada ? 'justify-center' : 'gap-3'} p-2.5 hover:bg-red-500/10 rounded-xl cursor-pointer transition-colors group`}>
-          <div className={`w-9 h-9 rounded-full ${avatarCor} flex items-center justify-center font-extrabold text-sm text-white shrink-0`}>
+        <div onClick={fazerLogout} title={colapsada ? `${sessao?.user.nome} · Sair` : 'Clique para sair'}
+          className={`flex items-center ${colapsada ? 'justify-center' : 'gap-2.5'} p-2 hover:bg-slate-800/80 rounded-xl cursor-pointer transition-colors group`}>
+          <div className={`w-8 h-8 rounded-full ${avatarCor} flex items-center justify-center font-extrabold text-xs text-white shrink-0`}>
             {sessao?.user.nome.substring(0, 2).toUpperCase()}
           </div>
           {!colapsada && (
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-extrabold text-white truncate">{sessao?.user.nome}</p>
-              <p className="text-[10px] text-slate-500 flex items-center gap-1 group-hover:text-red-400 transition-colors uppercase tracking-wider font-bold">
-                <LogOut size={10} /> Sair
-              </p>
-            </div>
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-extrabold text-white truncate">{sessao?.user.nome}</p>
+                <p className="text-[10px] text-slate-500 truncate">{sessao ? PAPEL_LABEL[sessao.user.papel] || sessao.user.papel : ''}</p>
+              </div>
+              <ChevronDown size={14} className="text-slate-500 shrink-0 group-hover:text-red-400 transition-colors" />
+            </>
           )}
         </div>
       </div>
