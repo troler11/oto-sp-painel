@@ -455,6 +455,17 @@ export default function App() {
     } catch (e) { /* silencioso */ }
   }, [sessao, toast, fetchSeguro]);
 
+  // Assume o ticket automaticamente quando o atendente responde e o bot já está pausado
+  // (Humano) — evita o clique extra em "Assumir Ficha" pra quem já tomou a conversa na
+  // prática. Só quando o robô já não está mais ativo, pra não reivindicar um ticket que
+  // o bot ainda está atendendo sozinho.
+  const assumirSeNecessario = () => {
+    if (agendamentoSelecionado?.status_atendimento !== 'PENDENTE' || !pacienteAtivoChat?.telefone) return;
+    const telLimpo = pacienteAtivoChat.telefone.replace(/\D/g, '');
+    const statusRobo = contatos.find(c => c.telefone.replace(/\D/g, '') === telLimpo)?.status_robo;
+    if (statusRobo && statusRobo !== 'Robô') assumirAtendimento(agendamentoSelecionado.id);
+  };
+
   const enviarMensagemChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!novaMensagem.trim() || enviandoMensagem || !pacienteAtivoChat?.telefone || pacienteAtivoChat.bloquearEnvio) return;
@@ -462,7 +473,11 @@ export default function App() {
     setTimeout(() => setDigitando(false), 1500);
     try {
       const res = await fetchSeguro(`${API_URL}/chat/enviar`, { method: 'POST', body: JSON.stringify({ telefone: pacienteAtivoChat.telefone, texto: novaMensagem }) });
-      if (res.ok) { setMensagens(prev => [...prev, { texto: novaMensagem, origem: 'ia_ou_recepcao', data: new Date().toISOString() }]); setNovaMensagem(''); }
+      if (res.ok) {
+        setMensagens(prev => [...prev, { texto: novaMensagem, origem: 'ia_ou_recepcao', data: new Date().toISOString() }]);
+        setNovaMensagem('');
+        assumirSeNecessario();
+      }
     } catch (e) { /* silencioso */ } finally { setEnviandoMensagem(false); }
   };
 
@@ -481,6 +496,7 @@ export default function App() {
           setMensagens(prev => [...prev, { texto: `📎 ${file.name}`, origem: 'ia_ou_recepcao', data: new Date().toISOString(), mediaBase64: b64, mediaMimetype: file.type }]);
         };
         reader.readAsDataURL(file);
+        assumirSeNecessario();
       } else {
         adicionarNotificacao('Erro ao enviar arquivo.', 'aviso');
       }
