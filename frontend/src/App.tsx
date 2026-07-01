@@ -240,7 +240,7 @@ export default function App() {
 
     socket.on('mensagem:nova', (payload: { telefone: string; texto: string; origem?: MensagemChat['origem']; created_at?: string }) => {
       if (pacienteAtivoChatRef.current?.telefone === payload.telefone) {
-        const isMidia = /^[📷🎵📄📎]/.test(payload.texto || '');
+        const isMidia = /^[📷🎵🎥📄📎]/.test(payload.texto || '');
         if (isMidia) {
           // Mídia não tem base64 no payload do socket — busca imediata no servidor
           const desde = ultimaMsgDataRef.current;

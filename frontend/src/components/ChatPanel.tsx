@@ -28,6 +28,12 @@ function AudioMessage({ base64, mimetype }: { base64: string; mimetype: string }
   return <audio controls src={src} className="max-w-[280px] rounded-xl" />;
 }
 
+function VideoMessage({ base64, mimetype }: { base64: string; mimetype: string }) {
+  const src = useMemo(() => base64ToBlob(base64, mimetype), [base64, mimetype]);
+  useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
+  return <video controls src={src} className="max-w-[280px] rounded-xl" />;
+}
+
 interface Props {
   pacienteAtivoChat: PacienteChat;
   mensagens: MensagemChat[];
@@ -140,6 +146,8 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
                 />
               ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('audio/') ? (
                 <AudioMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
+              ) : msg.mediaBase64 && msg.mediaMimetype?.startsWith('video/') ? (
+                <VideoMessage base64={msg.mediaBase64} mimetype={msg.mediaMimetype} />
               ) : msg.mediaBase64 && msg.mediaMimetype === 'application/pdf' ? (
                 <a
                   href={`data:application/pdf;base64,${msg.mediaBase64}`}
@@ -152,7 +160,7 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
               ) : msg.mediaBase64 ? (
                 <a
                   href={`data:${msg.mediaMimetype};base64,${msg.mediaBase64}`}
-                  download={textoFinal.replace(/^[📷🎵📄📎] /, '')}
+                  download={textoFinal.replace(/^[📷🎵🎥📄📎] /, '')}
                   className="flex items-center gap-2 text-[#005088] font-bold underline"
                 >
                   {textoFinal}

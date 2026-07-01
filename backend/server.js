@@ -698,7 +698,7 @@ app.post('/api/webhook/receber-midia', async (req, res) => {
     const midia_id = midiaRow.id;
 
     // Texto descritivo baseado no tipo
-    const icone = mimetype.startsWith('image/') ? '📷' : mimetype.startsWith('audio/') ? '🎵' : mimetype === 'application/pdf' ? '📄' : '📎';
+    const icone = mimetype.startsWith('image/') ? '📷' : mimetype.startsWith('audio/') ? '🎵' : mimetype.startsWith('video/') ? '🎥' : mimetype === 'application/pdf' ? '📄' : '📎';
     const textoDesc = `${icone} ${nomeArquivo}`;
 
     // Salva em chat_limpo
