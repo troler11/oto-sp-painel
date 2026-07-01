@@ -56,11 +56,27 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
   const { sessao } = useApp();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isAdmin = sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const fotoPerfil = useProfilePic(pacienteAtivoChat.telefone);
   const [fotoErro, setFotoErro] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens]);
+
+  // Auto-cresce o campo de texto conforme o conteúdo (igual WhatsApp), até um limite
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [novaMensagem]);
+
+  const slashQuery = novaMensagem.startsWith('/') ? novaMensagem.slice(1).toLowerCase() : null;
+  const modelosSlash = slashQuery === null ? [] : modelos.filter(m => m.titulo.toLowerCase().includes(slashQuery) || m.texto.toLowerCase().includes(slashQuery));
+  useEffect(() => { setSlashIndex(0); }, [slashQuery]);
+
+  const selecionarModeloSlash = (m: ModeloMensagem) => { setNovaMensagem(m.texto); textareaRef.current?.focus(); };
 
   return (
     <aside className="fixed right-0 top-0 h-screen w-[400px] bg-white border-l border-slate-200 shadow-2xl flex flex-col z-[60] animate-slide-up">
@@ -227,7 +243,7 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           )}
         </div>
 
-        <form onSubmit={onEnviar} className="flex items-center gap-2">
+        <form onSubmit={onEnviar} className="flex items-end gap-2">
           <input
             type="file"
             ref={fileInputRef}
@@ -243,13 +259,41 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
             className="p-3.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl disabled:opacity-50 transition-all shrink-0">
             {enviandoMidia ? <RefreshCw className="animate-spin" size={18} /> : <Paperclip size={18} />}
           </button>
-          <input type="text" value={novaMensagem} onChange={e => setNovaMensagem(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEnviar(e as unknown as React.FormEvent); } }}
-            placeholder={pacienteAtivoChat.bloquearEnvio ? 'Apenas leitura...' : 'Enter para enviar · Shift+Enter nova linha'}
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20 text-sm font-medium disabled:bg-slate-100 disabled:cursor-not-allowed transition-all placeholder-slate-400"
-            disabled={pacienteAtivoChat.bloquearEnvio} />
+          <div className="relative flex-1">
+            {slashQuery !== null && (
+              <div className="absolute bottom-full mb-2 left-0 w-full bg-white border border-slate-200 rounded-2xl shadow-2xl z-[70] max-h-56 overflow-y-auto custom-scrollbar animate-slide-up">
+                {modelosSlash.length === 0 ? (
+                  <p className="p-3 text-xs text-slate-400 italic text-center">Nenhum modelo encontrado para "/{slashQuery}".</p>
+                ) : modelosSlash.map((m, i) => (
+                  <button type="button" key={m.id} onClick={() => selecionarModeloSlash(m)}
+                    onMouseEnter={() => setSlashIndex(i)}
+                    className={`w-full text-left p-3 border-b last:border-0 border-slate-100 transition-colors ${i === slashIndex ? 'bg-[#11caa0]/10' : 'hover:bg-slate-50'}`}>
+                    <p className="text-xs font-extrabold text-[#005088] truncate">/{m.titulo}</p>
+                    <p className="text-[11px] text-slate-500 truncate mt-0.5">{m.texto}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={novaMensagem}
+              onChange={e => setNovaMensagem(e.target.value)}
+              onKeyDown={e => {
+                if (slashQuery !== null && modelosSlash.length > 0) {
+                  if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIndex(i => Math.min(i + 1, modelosSlash.length - 1)); return; }
+                  if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIndex(i => Math.max(i - 1, 0)); return; }
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); selecionarModeloSlash(modelosSlash[slashIndex]); return; }
+                  if (e.key === 'Escape') { e.preventDefault(); setNovaMensagem(''); return; }
+                }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEnviar(e as unknown as React.FormEvent); }
+              }}
+              placeholder={pacienteAtivoChat.bloquearEnvio ? 'Apenas leitura...' : 'Digite / para usar um modelo · Enter para enviar · Shift+Enter nova linha'}
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-[#11caa0] focus:ring-2 focus:ring-[#11caa0]/20 text-sm font-medium disabled:bg-slate-100 disabled:cursor-not-allowed transition-all placeholder-slate-400 resize-none custom-scrollbar leading-relaxed"
+              disabled={pacienteAtivoChat.bloquearEnvio} />
+          </div>
           <button type="submit" disabled={!novaMensagem.trim() || enviandoMensagem || pacienteAtivoChat.bloquearEnvio}
-            className="p-3.5 bg-gradient-to-r from-[#005088] to-[#003a66] text-white rounded-2xl hover:opacity-90 disabled:opacity-50 transition-all shadow-md">
+            className="p-3.5 bg-gradient-to-r from-[#005088] to-[#003a66] text-white rounded-2xl hover:opacity-90 disabled:opacity-50 transition-all shadow-md shrink-0">
             {enviandoMensagem ? <RefreshCw className="animate-spin" size={18} /> : <Send size={18} />}
           </button>
         </form>
