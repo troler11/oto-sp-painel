@@ -49,6 +49,9 @@ import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import PatientCard from './components/PatientCard';
 import ChatPanel from './components/ChatPanel';
+import ConversationList from './components/inbox/ConversationList';
+import PatientProfilePanel from './components/inbox/PatientProfilePanel';
+import KpiBar from './components/inbox/KpiBar';
 import PatientTimeline from './components/PatientTimeline';
 import ConfirmModal from './components/ConfirmModal';
 import ToastContainer from './components/ToastContainer';
@@ -92,8 +95,9 @@ export default function App() {
   const [searchContatos, setSearchContatos] = useState('');
   const [novoContatoForm, setNovoContatoForm] = useState<{ aberto: boolean; telefone: string; nome: string }>({ aberto: false, telefone: '', nome: '' });
   const [editandoContato, setEditandoContato] = useState<{ id: number; nome: string; telefone: string } | null>(null);
-  const [filtro, setFiltro] = useState('TRIAGEM');
-  const [subFiltroAgendado, setSubFiltroAgendado] = useState<'TODOS' | 'AGENDADO' | 'CONFIRMADO'>('TODOS');
+  const [filtro, setFiltro] = useState('ATENDIMENTOS');
+  const [densidade, setDensidade] = useState<'confortavel' | 'compacta'>(() => (localStorage.getItem('otoflow_densidade') as 'confortavel' | 'compacta') || 'confortavel');
+  useEffect(() => { localStorage.setItem('otoflow_densidade', densidade); }, [densidade]);
   const [editandoNomeLead, setEditandoNomeLead] = useState<{ id: number; valor: string } | null>(null);
   const [dataInicio, setDataInicio] = useState('');
   const [dataFim, setDataFim] = useState('');
@@ -103,7 +107,7 @@ export default function App() {
     const t = setTimeout(() => setBuscaDebounced(searchTerm), 300);
     return () => clearTimeout(t);
   }, [searchTerm]);
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filtro, subFiltroAgendado, buscaDebounced]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [filtro, buscaDebounced]);
   const [carregandoDados, setCarregandoDados] = useState(false);
   const [primeiraCarregamento, setPrimeiraCarregamento] = useState(true);
   const [erroAcesso, setErroAcesso] = useState('');
@@ -124,6 +128,7 @@ export default function App() {
   // ── Chat ──────────────────────────────────────────────────────
   const [chatAberto, setChatAberto] = useState(false);
   const [pacienteAtivoChat, setPacienteAtivoChat] = useState<PacienteChat | null>(null);
+  const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<Agendamento | null>(null);
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const ultimaMsgDataRef = useRef<string | null>(null);
   const [novaMensagem, setNovaMensagem] = useState('');
@@ -188,6 +193,16 @@ export default function App() {
 
   // ── Effects ───────────────────────────────────────────────────
   useEffect(() => { pacienteAtivoChatRef.current = pacienteAtivoChat; }, [pacienteAtivoChat]);
+
+  // Mantém o ticket selecionado na caixa de entrada sincronizado após ações
+  // (assumir, agendar, cancelar, finalizar) que atualizam o array agendamentos
+  useEffect(() => {
+    setAgendamentoSelecionado(prev => {
+      if (!prev) return prev;
+      const atualizado = agendamentos.find(a => a.id === prev.id);
+      return atualizado || prev;
+    });
+  }, [agendamentos]);
 
   // Mantém ref com o timestamp da última mensagem (evita closure stale no poll)
   useEffect(() => {
@@ -417,6 +432,7 @@ export default function App() {
     const isConcluido = ['FINALIZADO', 'CANCELADO'].includes(ag.status_atendimento);
     const bloquearEnvio = isLead ? false : isConcluido;
     setPacienteAtivoChat({ telefone: tel, nome_paciente: isLead ? (paciente as Lead).nome_titular : ag.nome_paciente, bloquearEnvio });
+    if (isLead) setAgendamentoSelecionado(null);
     setChatAberto(true);
     setNovaMensagem(localStorage.getItem(`otoflow_draft_${tel}`) || '');
     setTelefonesComMsgNova(prev => { const s = new Set(prev); s.delete(tel); return s; });
@@ -464,10 +480,45 @@ export default function App() {
     if (!ok) return;
     try {
       const res = await fetchSeguro(`${API_URL}/chat/${telefone}/interromper-robo`, { method: 'PUT' });
-      if (res.ok) { setLeads(prev => prev.map(l => l.telefone === telefone ? { ...l, status_robo: 'Humano' } : l)); toast('Robô pausado. Você assumiu o atendimento.', 'sucesso'); adicionarNotificacao('Robô pausado.', 'sucesso'); }
+      if (res.ok) {
+        setLeads(prev => prev.map(l => l.telefone === telefone ? { ...l, status_robo: 'Humano' } : l));
+        setContatos(prev => prev.map(c => c.telefone === telefone ? { ...c, status_robo: 'Humano' } : c));
+        toast('Robô pausado. Você assumiu o atendimento.', 'sucesso'); adicionarNotificacao('Robô pausado.', 'sucesso');
+      }
       else { const d = await res.json(); toast(d.erro || 'Falha ao pausar.', 'erro'); }
     } catch (e) { toast('Erro de conexão.', 'erro'); }
   };
+
+  const reativarRobo = async (telefone: string) => {
+    const ok = await confirm({ mensagem: 'Deseja devolver o atendimento para o robô?', tipo: 'aviso', confirmLabel: 'Reativar Bot', titulo: 'Reativar Bot' });
+    if (!ok) return;
+    try {
+      const res = await fetchSeguro(`${API_URL}/chat/${telefone}/reativar-robo`, { method: 'PUT' });
+      if (res.ok) {
+        setLeads(prev => prev.map(l => l.telefone === telefone ? { ...l, status_robo: 'Robô' } : l));
+        setContatos(prev => prev.map(c => c.telefone === telefone ? { ...c, status_robo: 'Robô' } : c));
+        toast('Robô reativado.', 'sucesso'); adicionarNotificacao('Robô reativado.', 'sucesso');
+      }
+      else { const d = await res.json(); toast(d.erro || 'Falha ao reativar.', 'erro'); }
+    } catch (e) { toast('Erro de conexão.', 'erro'); }
+  };
+
+  const abrirConversa = useCallback((item: Agendamento) => {
+    setAgendamentoSelecionado(item);
+    carregarChat(item, false);
+  }, [carregarChat]);
+
+  const salvarObservacoes = useCallback(async (id: number, observacoes: string) => {
+    const res = await fetchSeguro(`${API_URL}/agendamentos/${id}/dados`, { method: 'PATCH', body: JSON.stringify({ observacoes }) });
+    if (res.ok) {
+      setAgendamentos(prev => prev.map(a => a.id === id ? { ...a, observacoes } : a));
+      setAgendamentoSelecionado(prev => prev && prev.id === id ? { ...prev, observacoes } : prev);
+      toast('Observações salvas.', 'sucesso');
+    } else {
+      const d = await res.json().catch(() => ({}));
+      toast(d.erro || 'Erro ao salvar observações.', 'erro');
+    }
+  }, [fetchSeguro, toast]);
 
   const descartarLead = async (id: number) => {
     const ok = await confirm({ mensagem: 'Deseja remover este contacto definitivamente? Esta ação não pode ser desfeita.', tipo: 'perigo', confirmLabel: 'Remover' });
@@ -720,26 +771,6 @@ export default function App() {
   const filtrosLeads = useMemo(() => aplicarFiltros(leads, true), [aplicarFiltros, leads]);
   const filtrosAg = useMemo(() => aplicarFiltros(agendamentos), [aplicarFiltros, agendamentos]);
 
-  // Lista pessoal: só os tickets ativos assumidos por mim, ordenados por urgência
-  // (consulta atrasada > em atendimento parado há mais tempo > consulta futura mais próxima)
-  const minhasTarefas = useMemo(() => {
-    const meuNome = sessao?.user.nome;
-    if (!meuNome) return [];
-    const agora = Date.now();
-    const comPrioridade = filtrosAg
-      .filter(a => a.atendente_nome === meuNome && ['EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO'].includes(a.status_atendimento))
-      .map(a => {
-        const dataHoraConsulta = a.data_consulta ? new Date(`${a.data_consulta.split('T')[0]}T${a.hora_consulta || '00:00'}`).getTime() : null;
-        const atrasada = dataHoraConsulta !== null && dataHoraConsulta < agora;
-        let tier: number; let ordem: number;
-        if (atrasada) { tier = 0; ordem = agora - dataHoraConsulta!; }
-        else if (a.status_atendimento === 'EM ATENDIMENTO') { tier = 1; ordem = agora - new Date(a.data_atualizacao || a.data_criacao).getTime(); }
-        else { tier = 2; ordem = dataHoraConsulta !== null ? dataHoraConsulta - agora : Infinity; }
-        return { item: a, tier, ordem };
-      });
-    comPrioridade.sort((x, y) => x.tier - y.tier || y.ordem - x.ordem);
-    return comPrioridade.map(c => c.item);
-  }, [filtrosAg, sessao]);
   const listaLeads = useMemo(() => contatos
     .filter(c => c.status_robo !== 'Bloqueado')
     .filter(c => {
@@ -822,21 +853,6 @@ export default function App() {
   };
 
   // ── App autenticado ───────────────────────────────────────────
-  const ABAS = ['TRIAGEM', 'PENDENTE', 'EM ATENDIMENTO', 'AGENDADO', 'FINALIZADO', 'CANCELADO'] as const;
-  const ABAS_DESCRICAO: Record<typeof ABAS[number], string> = {
-    TRIAGEM: 'Contatos que mandaram mensagem e ainda não têm ficha aberta',
-    PENDENTE: 'Fichas abertas aguardando um atendente assumir',
-    'EM ATENDIMENTO': 'Atendente já assumiu e está coletando dados do paciente',
-    AGENDADO: 'Consulta marcada, aguardando a data chegar — inclui confirmadas pelo paciente',
-    FINALIZADO: 'Atendimento concluído — nada pendente aqui',
-    CANCELADO: 'Consulta cancelada ou ticket descartado sem agendamento',
-  };
-  const SUB_FILTROS_AGENDADO = [
-    { id: 'TODOS', label: 'Todos' },
-    { id: 'AGENDADO', label: 'Aguardando confirmação' },
-    { id: 'CONFIRMADO', label: 'Confirmados' },
-  ] as const;
-
   const exportarLeadsCSV = () => {
     const BOM = '﻿';
     const headers = ['Nome', 'Telefone', 'CPF', 'Status Bot', 'Última Mensagem', 'Data Cadastro'];
@@ -941,26 +957,7 @@ export default function App() {
         </div>
       );
     }
-
-    const lista = filtro === 'AGENDADO'
-      ? filtrosAg.filter(a => (a.status_atendimento === 'AGENDADO' || a.status_atendimento === 'CONFIRMADO') && (subFiltroAgendado === 'TODOS' || a.status_atendimento === subFiltroAgendado))
-      : filtrosAg.filter(a => a.status_atendimento === filtro);
-    if (filtro === 'PENDENTE') lista.sort((a, b) => new Date(a.data_criacao).getTime() - new Date(b.data_criacao).getTime());
-
-    if (primeiraCarregamento) return <CardSkeletonGrid count={6} />;
-
-    if (!lista.length) return (
-      <div className="col-span-full py-20 text-center">
-        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-slate-300" /></div>
-        <p className="text-slate-500 font-bold">Sem registos nesta fila.</p>
-      </div>
-    );
-
-    return [...lista.slice(0, visibleCount).map(item => (
-      <SortableCard key={item.id} id={String(item.id)}>
-        <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} onEditarDados={setPacienteEditandoDados} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
-      </SortableCard>
-    )), <BotaoCarregarMais key="carregar-mais" total={lista.length} />];
+    return null;
   };
 
   return (
@@ -995,42 +992,16 @@ export default function App() {
 
         <Sidebar filtro={filtro} setFiltro={setFiltro} contagens={contagens} erroAcesso={erroAcesso} fazerLogout={fazerLogout} setModalModelosAberto={setModalModelosAberto} setModalNovoUsuarioAberto={setModalNovoUsuarioAberto} abrirGestaoUsuarios={abrirGestaoUsuarios} setModalWahaAberto={setModalWahaAberto} />
 
-        <main className={`flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300 ${chatAberto ? 'mr-[400px]' : ''}`}>
-          <Header filtro={filtro} searchTerm={searchTerm} setSearchTerm={setSearchTerm} dataInicio={dataInicio} setDataInicio={setDataInicio} dataFim={dataFim} setDataFim={setDataFim} carregandoDados={carregandoDados} buscarDados={buscarDados} notificacoes={notificacoes} setNotificacoes={setNotificacoes} painelNotifAberto={painelNotifAberto} setPainelNotifAberto={setPainelNotifAberto} />
+        <main className={`flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300 ${chatAberto && filtro !== 'ATENDIMENTOS' ? 'mr-[400px]' : ''}`}>
+          <Header filtro={filtro} searchTerm={searchTerm} setSearchTerm={setSearchTerm} dataInicio={dataInicio} setDataInicio={setDataInicio} dataFim={dataFim} setDataFim={setDataFim} carregandoDados={carregandoDados} buscarDados={buscarDados} notificacoes={notificacoes} setNotificacoes={setNotificacoes} painelNotifAberto={painelNotifAberto} setPainelNotifAberto={setPainelNotifAberto} densidade={densidade} setDensidade={setDensidade} />
 
-          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            {!['RELATORIOS', 'LEADS', 'CONTATOS', 'MINHAS_TAREFAS'].includes(filtro) && (
-              <div className="flex items-center gap-3 mb-6">
-                <div className="flex-1 flex gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto scrollbar-hide">
-                  {ABAS.map(aba => (
-                    <button key={aba} onClick={() => setFiltro(aba)} title={ABAS_DESCRICAO[aba]}
-                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-extrabold text-xs transition-all whitespace-nowrap ${filtro === aba ? 'bg-[#005088] text-white shadow-md' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-                      {aba === 'TRIAGEM' ? 'Triagem' : aba === 'PENDENTE' ? 'Pendentes' : aba === 'EM ATENDIMENTO' ? 'Em Atendimento' : aba === 'AGENDADO' ? 'Agendados' : aba === 'FINALIZADO' ? 'Finalizados' : 'Cancelados'}
-                      {(contagens[aba] ?? 0) > 0 && <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${filtro === aba ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagens[aba]}</span>}
-                    </button>
-                  ))}
-                </div>
+          <div className={filtro === 'ATENDIMENTOS' ? 'flex-1 flex flex-col overflow-hidden' : 'flex-1 overflow-y-auto p-6 custom-scrollbar'}>
+            {filtro === 'TRIAGEM' && (
+              <div className="flex items-center justify-end gap-3 mb-6">
                 <button onClick={() => setModalNovoTicketAberto(true)}
                   className="flex items-center gap-2 bg-[#11caa0] hover:bg-[#0fb38a] text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm shrink-0">
                   <UserPlus size={15} /> Novo Ticket
                 </button>
-              </div>
-            )}
-
-            {filtro === 'AGENDADO' && (
-              <div className="flex gap-1.5 mb-6 -mt-3">
-                {SUB_FILTROS_AGENDADO.map(sub => {
-                  const contagemSub = sub.id === 'AGENDADO' ? contagens.AGENDADO_PURO : sub.id === 'CONFIRMADO' ? contagens.CONFIRMADO : undefined;
-                  return (
-                    <button key={sub.id} onClick={() => setSubFiltroAgendado(sub.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all ${subFiltroAgendado === sub.id ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                      {sub.label}
-                      {contagemSub !== undefined && contagemSub > 0 && (
-                        <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${subFiltroAgendado === sub.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>{contagemSub}</span>
-                      )}
-                    </button>
-                  );
-                })}
               </div>
             )}
 
@@ -1173,25 +1144,39 @@ export default function App() {
               );
             })() : filtro === 'RELATORIOS' ? (
               <Dashboard agendamentos={agendamentos} leads={leads} />
-            ) : filtro === 'MINHAS_TAREFAS' ? (
-              primeiraCarregamento ? <CardSkeletonGrid count={6} /> : !minhasTarefas.length ? (
-                <div className="col-span-full py-20 text-center">
-                  <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-slate-300" /></div>
-                  <p className="text-slate-500 font-bold">Nenhuma tarefa pendente atribuída a você.</p>
-                  <p className="text-slate-400 text-sm mt-1">Tickets que você assumir aparecem aqui, ordenados por urgência.</p>
+            ) : filtro === 'ATENDIMENTOS' ? (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0"><KpiBar agendamentos={agendamentos} leads={leads} contatos={contatos} /></div>
+                  <button onClick={() => setModalNovoTicketAberto(true)}
+                    className="flex items-center gap-2 bg-[#11caa0] hover:bg-[#0fb38a] text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-colors shadow-sm shrink-0 mr-4">
+                    <UserPlus size={15} /> Novo Ticket
+                  </button>
                 </div>
-              ) : (
-                <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 pb-10">
-                  {minhasTarefas.slice(0, visibleCount).map(item => (
-                    <PatientCard key={item.id} item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} onEditarDados={setPacienteEditandoDados} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
-                  ))}
-                  <BotaoCarregarMais total={minhasTarefas.length} />
+                <div className="flex-1 flex overflow-hidden">
+                  <ConversationList itens={filtrosAg} contatos={contatos} telefonesComMsgNova={telefonesComMsgNova}
+                    selecionadoId={agendamentoSelecionado?.id ?? null} onSelecionar={abrirConversa} />
+                  {chatAberto && pacienteAtivoChat && agendamentoSelecionado ? (
+                    <ChatPanel pacienteAtivoChat={pacienteAtivoChat} mensagens={mensagens} novaMensagem={novaMensagem} setNovaMensagem={setNovaMensagem} enviandoMensagem={enviandoMensagem} digitando={digitando} modelos={modelos} dropdownModelosAberto={dropdownModelosAberto} setDropdownModelosAberto={setDropdownModelosAberto}
+                      onClose={() => { setChatAberto(false); setAgendamentoSelecionado(null); setDropdownModelosAberto(false); }}
+                      onEnviar={enviarMensagemChat} onEnviarMidia={enviarMidiaChat} enviandoMidia={enviandoMidia}
+                      onInterromperRobo={interromperRobo} onReativarRobo={reativarRobo}
+                      onAbrirModelos={() => { setModalModelosAberto(true); setDropdownModelosAberto(false); }} onEditarModelo={abrirEdicaoModelo} onRemoverModelo={removerModelo}
+                      agendamento={agendamentoSelecionado} onAssumir={assumirAtendimento} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} />
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-slate-400 text-sm font-semibold bg-slate-50">
+                      Selecione um atendimento na lista à esquerda
+                    </div>
+                  )}
+                  {agendamentoSelecionado && (
+                    <PatientProfilePanel paciente={agendamentoSelecionado} agendamentos={agendamentos} onEditarDados={setPacienteEditandoDados} onSalvarObservacoes={salvarObservacoes} />
+                  )}
                 </div>
-              )
+              </div>
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={filtrosAg.map(a => String(a.id))} strategy={verticalListSortingStrategy}>
-                  <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 pb-10">
+                  <div className={`${densidade === 'compacta' ? 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6' : 'grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'} pb-10`}>
                     {renderKanban()}
                   </div>
                 </SortableContext>
@@ -1210,8 +1195,10 @@ export default function App() {
           </div>
         </main>
 
-        {chatAberto && pacienteAtivoChat && (
+        {chatAberto && pacienteAtivoChat && filtro !== 'ATENDIMENTOS' && (
+          <div className="fixed right-0 top-0 h-screen w-[400px] border-l border-slate-200 shadow-2xl z-[60] flex">
           <ChatPanel pacienteAtivoChat={pacienteAtivoChat} mensagens={mensagens} novaMensagem={novaMensagem} setNovaMensagem={setNovaMensagem} enviandoMensagem={enviandoMensagem} digitando={digitando} modelos={modelos} dropdownModelosAberto={dropdownModelosAberto} setDropdownModelosAberto={setDropdownModelosAberto} onClose={() => { setChatAberto(false); setDropdownModelosAberto(false); }} onEnviar={enviarMensagemChat} onEnviarMidia={enviarMidiaChat} enviandoMidia={enviandoMidia} onInterromperRobo={interromperRobo} onAbrirModelos={() => { setModalModelosAberto(true); setDropdownModelosAberto(false); }} onEditarModelo={abrirEdicaoModelo} onRemoverModelo={removerModelo} />
+          </div>
         )}
 
         {pacienteTimeline && <PatientTimeline paciente={pacienteTimeline} onClose={() => setPacienteTimeline(null)} />}

@@ -1730,6 +1730,27 @@ app.put('/api/chat/:telefone/interromper-robo', verificarToken, async (req, res)
   }
 });
 
+app.put('/api/chat/:telefone/reativar-robo', verificarToken, async (req, res) => {
+  const telefoneLimpo = req.params.telefone.replace(/\D/g, '');
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE contatos_whatsapp SET status_robo='Robô' WHERE telefone=$1`,
+      [telefoneLimpo]
+    );
+    if (rowCount === 0) return res.status(404).json({ erro: 'Contacto não encontrado.' });
+
+    await registarAuditoria({
+      usuario_id: req.user.id, usuario_nome: req.user.nome,
+      acao: 'REATIVAR_ROBO', entidade: 'contatos_whatsapp',
+      detalhes: { telefone: telefoneLimpo }, ip: req.ip
+    });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao reativar robô.' });
+  }
+});
+
 // ============================================================
 // RENOMEAR PACIENTE (agendamento) e TITULAR (lead/triagem)
 // ============================================================
@@ -1755,18 +1776,21 @@ app.patch('/api/agendamentos/:id/nome', verificarToken, async (req, res) => {
 // exigidos pelo agendarNoItsaude() para sincronizar com o iTSaúde.
 // ============================================================
 app.patch('/api/agendamentos/:id/dados', verificarToken, async (req, res) => {
-  const { cpf_paciente, nascimento_paciente, pagamento } = req.body;
+  const { cpf_paciente, nascimento_paciente, pagamento, observacoes } = req.body;
   if (cpf_paciente && !validar.cpf(cpf_paciente)) return res.status(400).json({ erro: 'CPF inválido.' });
   if (nascimento_paciente && !validar.date(nascimento_paciente)) return res.status(400).json({ erro: 'Data de nascimento inválida.' });
   try {
     const cpfLimpo = cpf_paciente ? cpf_paciente.replace(/\D/g, '') : null;
+    // observacoes usa comparação explícita com undefined (em vez de "|| null") pra
+    // permitir limpar o campo de notas — string vazia é um valor válido aqui.
     const { rowCount } = await pool.query(
       `UPDATE agendamentos SET
          cpf_paciente = COALESCE($1, cpf_paciente),
          nascimento_paciente = COALESCE($2, nascimento_paciente),
-         pagamento = COALESCE($3, pagamento)
-       WHERE id = $4`,
-      [cpfLimpo, nascimento_paciente || null, pagamento || null, req.params.id]
+         pagamento = COALESCE($3, pagamento),
+         observacoes = COALESCE($4, observacoes)
+       WHERE id = $5`,
+      [cpfLimpo, nascimento_paciente || null, pagamento || null, observacoes !== undefined ? observacoes : null, req.params.id]
     );
     if (rowCount === 0) return res.status(404).json({ erro: 'Agendamento não encontrado.' });
     res.json({ sucesso: true });

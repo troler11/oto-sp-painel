@@ -4,9 +4,9 @@ import { formatarHora, formatarDataBr } from '../utils/helpers';
 
 interface Props { paciente: Agendamento; onClose: () => void; }
 
-interface Evento { icon: React.ReactNode; label: string; sub?: string; cor: string; data?: string; }
+export interface Evento { icon: React.ReactNode; label: string; sub?: string; cor: string; data?: string; }
 
-export default function PatientTimeline({ paciente, onClose }: Props) {
+export function buildEventosTimeline(paciente: Agendamento): Evento[] {
   const eventos: Evento[] = [];
 
   eventos.push({
@@ -46,6 +46,12 @@ export default function PatientTimeline({ paciente, onClose }: Props) {
       cor: 'bg-red-500', data: paciente.data_cancelamento,
     });
   }
+
+  return eventos;
+}
+
+export default function PatientTimeline({ paciente, onClose }: Props) {
+  const eventos = buildEventosTimeline(paciente);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { useProfilePic } from '../hooks/useProfilePic';
-import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History, Check, X as XIcon, IdCard } from 'lucide-react';
+import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History, Check, X as XIcon, IdCard, MoreVertical } from 'lucide-react';
 import type { Agendamento } from '../types';
 import { formatarDataBr, formatarHoraBr, formatarHora, getUrgencia, getAvatarCor } from '../utils/helpers';
 import { useApp } from '../context/AppContext';
@@ -17,6 +17,7 @@ interface Props {
   onRenomear: (id: number, novoNome: string) => void;
   onEditarDados: (item: Agendamento) => void;
   temMsgNova?: boolean;
+  compacto?: boolean;
 }
 
 // Ticker global compartilhado — um único setInterval para todos os cards PENDENTE
@@ -53,7 +54,41 @@ function useTimerVivo(dataCriacao: string, ativo: boolean) {
   return tempo;
 }
 
-const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear, onEditarDados, temMsgNova }: Props) {
+export interface AcaoMenu { label: string; icon: React.ReactNode; onClick: () => void; perigo?: boolean; }
+
+// Botão "..." com ações secundárias (menos frequentes) — evita empilhar muitos botões no card
+export function AcoesMenu({ items, disabled }: { items: AcaoMenu[]; disabled?: boolean }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [aberto]);
+
+  return (
+    <div className="relative shrink-0" ref={ref}>
+      <button type="button" disabled={disabled} onClick={() => setAberto(v => !v)} title="Mais ações"
+        className={`p-2.5 rounded-xl transition-colors ${disabled ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+        <MoreVertical size={17} />
+      </button>
+      {aberto && !disabled && (
+        <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-20 overflow-hidden animate-slide-up">
+          {items.map((it, i) => (
+            <button key={i} type="button" onClick={() => { setAberto(false); it.onClick(); }}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-xs font-bold text-left transition-colors ${it.perigo ? 'text-red-600 hover:bg-red-50' : 'text-slate-600 hover:bg-slate-50'}`}>
+              {it.icon} {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear, onEditarDados, temMsgNova, compacto }: Props) {
   const { sessao } = useApp();
   const [editandoNome, setEditandoNome] = useState(false);
   const [nomeEditado, setNomeEditado] = useState(item.nome_paciente);
@@ -86,16 +121,16 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
     : isDescartado ? 'bg-slate-400' : 'bg-red-400';
 
   return (
-    <div className={`bg-white rounded-2xl p-5 shadow-sm border transition-all hover:shadow-xl hover:-translate-y-1 relative flex flex-col group ${corBorda}`}>
+    <div className={`bg-white rounded-2xl ${compacto ? 'p-3' : 'p-5'} shadow-sm border transition-all hover:shadow-xl hover:-translate-y-1 relative flex flex-col group ${corBorda}`}>
       <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl ${corBarra}`} />
 
       {/* Header */}
-      <div className="flex justify-between items-start mb-3">
+      <div className={`flex justify-between items-start ${compacto ? 'mb-1.5' : 'mb-3'}`}>
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           {fotoPerfil && !fotoErro ? (
-            <img src={fotoPerfil} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm" onError={() => setFotoErro(true)} />
+            <img src={fotoPerfil} alt="" className={`${compacto ? 'w-7 h-7' : 'w-10 h-10'} rounded-full object-cover shrink-0 shadow-sm`} onError={() => setFotoErro(true)} />
           ) : (
-            <div className={`w-10 h-10 rounded-full ${avatarCor} text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-sm`}>
+            <div className={`${compacto ? 'w-7 h-7 text-[11px]' : 'w-10 h-10 text-sm'} rounded-full ${avatarCor} text-white flex items-center justify-center font-extrabold shrink-0 shadow-sm`}>
               {item.nome_paciente.substring(0, 2).toUpperCase()}
             </div>
           )}
@@ -143,34 +178,36 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
 
       {/* Timer ao vivo */}
       {isPendente ? (
-        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgencia === 'critica' ? 'bg-red-100 text-red-700 border border-red-300' : urgencia === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgencia === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg ${compacto ? 'mb-1.5' : 'mb-3'} tabular-nums ${urgencia === 'critica' ? 'bg-red-100 text-red-700 border border-red-300' : urgencia === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgencia === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
           <Clock size={11} className={urgencia === 'alta' ? 'animate-pulse' : ''} />
           {timerVivo} na fila{urgencia === 'critica' ? ' — aguardando há muito tempo' : ''}
         </div>
       ) : emAndamento && (
-        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg mb-3 tabular-nums ${urgenciaParado === 'critica' || urgenciaParado === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgenciaParado === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+        <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-lg ${compacto ? 'mb-1.5' : 'mb-3'} tabular-nums ${urgenciaParado === 'critica' || urgenciaParado === 'alta' ? 'bg-red-50 text-red-600 border border-red-200' : urgenciaParado === 'media' ? 'bg-amber-50 text-amber-600 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
           <Clock size={11} />
           {timerVivo} {item.status_atendimento === 'EM ATENDIMENTO' ? 'em atendimento' : item.status_atendimento === 'AGENDADO' ? 'aguardando consulta' : 'confirmado, aguardando consulta'}
         </div>
       )}
 
-      <div className="space-y-1 text-xs border-l-2 border-slate-100 pl-2.5 mb-4 relative group/dados">
-        <button onClick={() => onEditarDados(item)} title="Editar CPF, nascimento e convênio"
-          className="absolute right-0 top-0 opacity-0 group-hover/dados:opacity-100 text-slate-300 hover:text-[#005088] transition-opacity">
-          <IdCard size={13} />
-        </button>
-        <p className="text-slate-600"><span className="text-slate-400">CPF:</span> {item.cpf_paciente || 'N/A'}</p>
-        {item.nascimento_paciente && <p className="text-slate-600"><span className="text-slate-400">Nasc:</span> {formatarDataBr(item.nascimento_paciente)}</p>}
-        {item.telefone && <p className="text-slate-600"><span className="text-slate-400">Tel:</span> {item.telefone}</p>}
-        <p className="text-slate-600"><span className="text-slate-400">Entrada:</span> {formatarHora(item.data_criacao)}</p>
-      </div>
+      {!compacto && (
+        <div className="space-y-1 text-xs border-l-2 border-slate-100 pl-2.5 mb-4 relative group/dados">
+          <button onClick={() => onEditarDados(item)} title="Editar CPF, nascimento e convênio"
+            className="absolute right-0 top-0 opacity-0 group-hover/dados:opacity-100 text-slate-300 hover:text-[#005088] transition-opacity">
+            <IdCard size={13} />
+          </button>
+          <p className="text-slate-600"><span className="text-slate-400">CPF:</span> {item.cpf_paciente || 'N/A'}</p>
+          {item.nascimento_paciente && <p className="text-slate-600"><span className="text-slate-400">Nasc:</span> {formatarDataBr(item.nascimento_paciente)}</p>}
+          {item.telefone && <p className="text-slate-600"><span className="text-slate-400">Tel:</span> {item.telefone}</p>}
+          <p className="text-slate-600"><span className="text-slate-400">Entrada:</span> {formatarHora(item.data_criacao)}</p>
+        </div>
+      )}
 
       {item.para_terceiro && (
         <span className="inline-block mb-3 bg-blue-50 text-blue-700 text-[10px] font-bold px-2.5 py-1 rounded-full border border-blue-100">Por: {item.nome_titular}</span>
       )}
 
       {item.atendente_nome && (
-        <div className="mb-3 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1.5 rounded-lg">
+        <div className={`${compacto ? 'mb-1.5' : 'mb-3'} inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1.5 rounded-lg`}>
           <div className={`w-5 h-5 rounded-full ${getAvatarCor(item.atendente_nome)} text-white flex items-center justify-center text-[9px] font-extrabold shrink-0`}>
             {item.atendente_nome.substring(0, 1)}
           </div>
@@ -179,7 +216,7 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
       )}
 
       {['AGENDADO', 'CONFIRMADO', 'FINALIZADO'].includes(item.status_atendimento) && item.data_consulta && (
-        <div className={`border rounded-xl p-3 mb-4 text-center ${item.status_atendimento === 'FINALIZADO' ? 'bg-indigo-50 border-indigo-100' : item.status_atendimento === 'CONFIRMADO' ? 'bg-violet-50 border-violet-100' : 'bg-emerald-50 border-emerald-100'}`}>
+        <div className={`border rounded-xl p-3 ${compacto ? 'mb-2' : 'mb-4'} text-center ${item.status_atendimento === 'FINALIZADO' ? 'bg-indigo-50 border-indigo-100' : item.status_atendimento === 'CONFIRMADO' ? 'bg-violet-50 border-violet-100' : 'bg-emerald-50 border-emerald-100'}`}>
           <p className={`text-[9px] font-extrabold uppercase tracking-widest mb-1 ${item.status_atendimento === 'FINALIZADO' ? 'text-indigo-500' : item.status_atendimento === 'CONFIRMADO' ? 'text-violet-500' : 'text-emerald-500'}`}>
             {item.status_atendimento === 'FINALIZADO' ? '✓ Realizada' : item.status_atendimento === 'CONFIRMADO' ? '✓ Confirmado pelo Paciente' : '✓ Confirmada'}
           </p>
@@ -204,12 +241,16 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
         )
       )}
 
-      <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-xs mb-4 flex-grow">
-        {item.periodo_atendimento && <div className="flex items-center gap-2 text-slate-700"><SunMedium size={13} className="text-amber-500" /><span className="font-semibold">{item.periodo_atendimento}</span></div>}
-        {medicoExibir && <div className="flex items-center gap-2 text-slate-700"><Stethoscope size={13} className="text-blue-500" /><span className="font-semibold">{medicoExibir}</span></div>}
-        <div className="flex items-center gap-2 text-slate-700"><MapPin size={13} className="text-slate-400" /><span className="font-semibold">{item.unidade}</span></div>
-        {item.data_consulta && item.pagamento && <div className="flex items-center gap-2 text-slate-700"><CreditCard size={13} className="text-slate-400" /><span className="font-semibold">{item.pagamento}</span></div>}
-      </div>
+      {compacto ? (
+        <div className="flex-grow" />
+      ) : (
+        <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-xs mb-4 flex-grow">
+          {item.periodo_atendimento && <div className="flex items-center gap-2 text-slate-700"><SunMedium size={13} className="text-amber-500" /><span className="font-semibold">{item.periodo_atendimento}</span></div>}
+          {medicoExibir && <div className="flex items-center gap-2 text-slate-700"><Stethoscope size={13} className="text-blue-500" /><span className="font-semibold">{medicoExibir}</span></div>}
+          <div className="flex items-center gap-2 text-slate-700"><MapPin size={13} className="text-slate-400" /><span className="font-semibold">{item.unidade}</span></div>
+          {item.data_consulta && item.pagamento && <div className="flex items-center gap-2 text-slate-700"><CreditCard size={13} className="text-slate-400" /><span className="font-semibold">{item.pagamento}</span></div>}
+        </div>
+      )}
 
       <div className="space-y-2 mt-auto">
         {item.status_atendimento === 'PENDENTE' && (
@@ -226,15 +267,11 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
                 className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-1.5 ${podeEditar ? 'bg-gradient-to-r from-[#11caa0] to-[#0e9f7e] text-white shadow-sm hover:shadow-[#11caa0]/25' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
                 {podeEditar ? 'Agendar' : <><Lock size={13} /> Bloqueado</>}
               </button>
-              <button disabled={!podeEditar} onClick={() => podeEditar && onCancelar(item)}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-bold ${podeEditar ? 'bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors' : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'}`}>
-                Cancelar
-              </button>
+              <AcoesMenu disabled={!podeEditar} items={[
+                { label: 'Devolver à Fila', icon: <RefreshCw size={14} />, onClick: () => onDevolver(item.id) },
+                { label: 'Cancelar', icon: <XCircle size={14} />, onClick: () => onCancelar(item), perigo: true },
+              ]} />
             </div>
-            <button disabled={!podeEditar} onClick={() => podeEditar && onDevolver(item.id)}
-              className={`w-full py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 ${podeEditar ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
-              <RefreshCw size={13} /> Devolver à Fila
-            </button>
             <button disabled={!podeEditar} onClick={() => podeEditar && onFinalizar(item.id)}
               className={`w-full py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${podeEditar ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
               <CheckCircle2 size={16} /> Finalizar Atendimento
@@ -249,10 +286,9 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
                 className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 ${podeEditar ? 'bg-white border border-blue-200 text-blue-600 hover:bg-blue-50' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
                 {podeEditar ? <><Edit2 size={13} /> Remarcar</> : <><Lock size={12} /> Bloqueado</>}
               </button>
-              <button disabled={!podeEditar} onClick={() => podeEditar && onCancelar(item)}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold ${podeEditar ? 'bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
-                Cancelar
-              </button>
+              <AcoesMenu disabled={!podeEditar} items={[
+                { label: 'Cancelar', icon: <XCircle size={14} />, onClick: () => onCancelar(item), perigo: true },
+              ]} />
             </div>
             <button disabled={!podeEditar} onClick={() => podeEditar && onFinalizar(item.id)}
               className={`w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${podeEditar ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
@@ -264,10 +300,9 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
           <div className="flex flex-col gap-2">
             <div className="flex gap-2">
               <div className="relative"><button onClick={() => onChat(item)} className="p-2.5 bg-violet-50 text-violet-600 hover:bg-violet-100 rounded-xl transition-colors border border-violet-100"><MessageSquare size={17} /></button>{temMsgNova && <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />}</div>
-              <button disabled={!podeEditar} onClick={() => podeEditar && onCancelar(item)}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-bold ${podeEditar ? 'bg-white border border-red-200 text-red-600 hover:bg-red-50 transition-colors' : 'bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed'}`}>
-                Cancelar
-              </button>
+              <AcoesMenu disabled={!podeEditar} items={[
+                { label: 'Cancelar', icon: <XCircle size={14} />, onClick: () => onCancelar(item), perigo: true },
+              ]} />
             </div>
             <button disabled={!podeEditar} onClick={() => podeEditar && onFinalizar(item.id)}
               className={`w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${podeEditar ? 'bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>

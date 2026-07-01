@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { ChevronRight, Search, X, CalendarDays, Bell, RefreshCw } from 'lucide-react';
+import { ChevronRight, Search, X, CalendarDays, Bell, RefreshCw, LayoutGrid, Rows3 } from 'lucide-react';
 import type { Notificacao } from '../types';
 
 interface Props {
@@ -13,16 +13,19 @@ interface Props {
   setNotificacoes: Dispatch<SetStateAction<Notificacao[]>>;
   painelNotifAberto: boolean;
   setPainelNotifAberto: (v: boolean) => void;
+  densidade: 'confortavel' | 'compacta';
+  setDensidade: (v: 'confortavel' | 'compacta') => void;
 }
 
 const TITULO: Record<string, string> = {
   RELATORIOS: 'Relatórios & BI',
   LEADS: 'Recuperação Ativa',
-  'EM ATENDIMENTO': 'Em Atendimento',
-  MINHAS_TAREFAS: 'Minhas Tarefas',
+  ATENDIMENTOS: 'Atendimentos',
 };
 
-export default function Header({ filtro, searchTerm, setSearchTerm, dataInicio, setDataInicio, dataFim, setDataFim, carregandoDados, buscarDados, notificacoes, setNotificacoes, painelNotifAberto, setPainelNotifAberto }: Props) {
+const ABAS_COM_CARDS = ['TRIAGEM', 'LEADS'];
+
+export default function Header({ filtro, searchTerm, setSearchTerm, dataInicio, setDataInicio, dataFim, setDataFim, carregandoDados, buscarDados, notificacoes, setNotificacoes, painelNotifAberto, setPainelNotifAberto, densidade, setDensidade }: Props) {
   const naoLidas = notificacoes.filter(n => !n.lida).length;
   const titulo = TITULO[filtro] || (filtro.charAt(0) + filtro.slice(1).toLowerCase() + 's');
 
@@ -59,6 +62,14 @@ export default function Header({ filtro, searchTerm, setSearchTerm, dataInicio, 
               <button onClick={() => { setDataInicio(''); setDataFim(''); }} className="text-slate-400 hover:text-red-500 transition-colors"><X size={13} /></button>
             )}
           </div>
+        )}
+
+        {ABAS_COM_CARDS.includes(filtro) && (
+          <button onClick={() => setDensidade(densidade === 'compacta' ? 'confortavel' : 'compacta')}
+            title={densidade === 'compacta' ? 'Mudar para visão confortável' : 'Mudar para visão compacta'}
+            className="p-2.5 text-slate-500 hover:bg-slate-100 hover:text-[#005088] rounded-xl transition-colors">
+            {densidade === 'compacta' ? <LayoutGrid size={18} /> : <Rows3 size={18} />}
+          </button>
         )}
 
         <div className="relative">

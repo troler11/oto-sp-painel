@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip } from 'lucide-react';
-import type { ModeloMensagem, MensagemChat, PacienteChat } from '../types';
+import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip, CheckCircle2, CalendarDays, Bot, Lock } from 'lucide-react';
+import type { Agendamento, ModeloMensagem, MensagemChat, PacienteChat } from '../types';
 import { useApp } from '../context/AppContext';
 import { useProfilePic } from '../hooks/useProfilePic';
+import { AcoesMenu } from './PatientCard';
 
 function base64ToBlob(b64: string, mime: string): string {
   try {
@@ -111,13 +112,23 @@ interface Props {
   onEnviarMidia: (file: File) => void;
   enviandoMidia?: boolean;
   onInterromperRobo: (telefone: string) => void;
+  onReativarRobo?: (telefone: string) => void;
   onAbrirModelos: () => void;
   onEditarModelo: (m: ModeloMensagem) => void;
   onRemoverModelo: (id: number) => void;
+  // Ticket associado (só existe quando o chat é aberto de dentro da caixa de
+  // entrada "Atendimentos" — Triagem/Recuperação de Leads não têm ticket ainda)
+  agendamento?: Agendamento | null;
+  onAssumir?: (id: number) => void;
+  onAgendar?: (item: Agendamento, isEdicao?: boolean) => void;
+  onCancelar?: (item: Agendamento) => void;
+  onDevolver?: (id: number) => void;
+  onFinalizar?: (id: number) => void;
 }
 
-export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onEnviarMidia, enviandoMidia, onInterromperRobo, onAbrirModelos, onEditarModelo, onRemoverModelo }: Props) {
+export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onEnviarMidia, enviandoMidia, onInterromperRobo, onReativarRobo, onAbrirModelos, onEditarModelo, onRemoverModelo, agendamento, onAssumir, onAgendar, onCancelar, onDevolver, onFinalizar }: Props) {
   const { sessao } = useApp();
+  const podeEditar = !agendamento || ['AGENDADO', 'CONFIRMADO', 'EM ATENDIMENTO'].includes(agendamento.status_atendimento) || sessao?.user.nome === agendamento.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -152,33 +163,84 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
   }, [mensagens]);
 
   return (
-    <aside className="fixed right-0 top-0 h-screen w-[400px] bg-white border-l border-slate-200 shadow-2xl flex flex-col z-[60] animate-slide-up">
+    <aside className="flex-1 h-full min-w-0 bg-white flex flex-col animate-slide-up">
       <div className="p-4 bg-gradient-to-r from-[#005088] to-[#003a66] text-white flex justify-between items-center shrink-0">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           {fotoPerfil && !fotoErro ? (
-            <img src={fotoPerfil} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white/30" onError={() => setFotoErro(true)} />
+            <img src={fotoPerfil} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white/30 shrink-0" onError={() => setFotoErro(true)} />
           ) : (
-            <div className="w-11 h-11 bg-white/15 border border-white/20 rounded-full flex items-center justify-center font-extrabold text-base">
+            <div className="w-11 h-11 bg-white/15 border border-white/20 rounded-full flex items-center justify-center font-extrabold text-base shrink-0">
               {pacienteAtivoChat.nome_paciente?.substring(0, 2).toUpperCase()}
             </div>
           )}
-          <div>
-            <p className="font-extrabold truncate w-44">{pacienteAtivoChat.nome_paciente}</p>
+          <div className="min-w-0">
+            <p className="font-extrabold truncate">{pacienteAtivoChat.nome_paciente}</p>
             <p className="text-[11px] text-[#11caa0] font-bold flex items-center gap-1 mt-0.5">
               <span className="w-1.5 h-1.5 bg-[#11caa0] rounded-full animate-pulse inline-block" /> Chat em Tempo Real
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {!pacienteAtivoChat.bloquearEnvio && (
+        <div className="flex items-center gap-2 shrink-0">
+          {!pacienteAtivoChat.bloquearEnvio ? (
             <button onClick={() => onInterromperRobo(pacienteAtivoChat.telefone)}
               className="bg-orange-500/80 hover:bg-orange-500 text-white text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg flex items-center gap-1 uppercase tracking-wider transition-colors">
               <XCircle size={13} /> Pausar Bot
+            </button>
+          ) : onReativarRobo && (
+            <button onClick={() => onReativarRobo(pacienteAtivoChat.telefone)}
+              className="bg-blue-500/80 hover:bg-blue-500 text-white text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg flex items-center gap-1 uppercase tracking-wider transition-colors">
+              <Bot size={13} /> Reativar Bot
             </button>
           )}
           <button onClick={() => { onClose(); setDropdownModelosAberto(false); }} className="p-2 hover:bg-white/15 rounded-xl transition-colors"><X size={19} /></button>
         </div>
       </div>
+
+      {agendamento && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200 shrink-0 overflow-x-auto scrollbar-hide">
+          {agendamento.status_atendimento === 'PENDENTE' && onAssumir && (
+            <button onClick={() => onAssumir(agendamento.id)}
+              className="bg-gradient-to-r from-[#005088] to-[#003a66] hover:opacity-90 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold shadow-sm transition-all shrink-0">
+              Assumir Ficha
+            </button>
+          )}
+          {agendamento.status_atendimento === 'EM ATENDIMENTO' && onAgendar && (
+            <>
+              <button disabled={!podeEditar} onClick={() => podeEditar && onAgendar(agendamento)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all ${podeEditar ? 'bg-gradient-to-r from-[#11caa0] to-[#0e9f7e] text-white shadow-sm' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                {podeEditar ? <><CalendarDays size={13} /> Agendar</> : <><Lock size={12} /> Bloqueado</>}
+              </button>
+              {onFinalizar && (
+                <button disabled={!podeEditar} onClick={() => podeEditar && onFinalizar(agendamento.id)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all ${podeEditar ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                  <CheckCircle2 size={13} /> Finalizar
+                </button>
+              )}
+              <AcoesMenu disabled={!podeEditar} items={[
+                ...(onDevolver ? [{ label: 'Devolver à Fila', icon: <RefreshCw size={14} />, onClick: () => onDevolver(agendamento.id) }] : []),
+                ...(onCancelar ? [{ label: 'Cancelar', icon: <XCircle size={14} />, onClick: () => onCancelar(agendamento), perigo: true }] : []),
+              ]} />
+            </>
+          )}
+          {(agendamento.status_atendimento === 'AGENDADO' || agendamento.status_atendimento === 'CONFIRMADO') && (
+            <>
+              {onAgendar && (
+                <button disabled={!podeEditar} onClick={() => podeEditar && onAgendar(agendamento, true)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all ${podeEditar ? 'bg-white border border-blue-200 text-blue-600' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                  <Edit2 size={13} /> Remarcar
+                </button>
+              )}
+              {onFinalizar && (
+                <button disabled={!podeEditar} onClick={() => podeEditar && onFinalizar(agendamento.id)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all ${podeEditar ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                  <CheckCircle2 size={13} /> Concluir Consulta
+                </button>
+              )}
+              {onCancelar && <AcoesMenu disabled={!podeEditar} items={[{ label: 'Cancelar', icon: <XCircle size={14} />, onClick: () => onCancelar(agendamento), perigo: true }]} />}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#eae6df] custom-scrollbar">
         {mensagensVisiveis.map(({ msg, textoFinal }, i) => {
