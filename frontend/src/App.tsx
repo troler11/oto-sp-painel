@@ -201,9 +201,9 @@ export default function App() {
 
   useEffect(() => {
     const mapa = new Map<string, string>();
-    agendamentos.forEach(a => mapa.set(a.telefone.replace(/\D/g, ''), a.nome_paciente));
-    leads.forEach(l => mapa.set(l.telefone.replace(/\D/g, ''), l.nome_atendimento || l.nome_titular || l.telefone));
-    contatos.forEach(c => { const tel = c.telefone.replace(/\D/g, ''); if (!mapa.has(tel)) mapa.set(tel, c.nome_atendimento || c.nome_titular || c.telefone); });
+    agendamentos.forEach(a => { if (a.telefone) mapa.set(a.telefone.replace(/\D/g, ''), a.nome_paciente); });
+    leads.forEach(l => { if (l.telefone) mapa.set(l.telefone.replace(/\D/g, ''), l.nome_atendimento || l.nome_titular || l.telefone); });
+    contatos.forEach(c => { if (!c.telefone) return; const tel = c.telefone.replace(/\D/g, ''); if (!mapa.has(tel)) mapa.set(tel, c.nome_atendimento || c.nome_titular || c.telefone); });
     nomesPorTelefoneRef.current = mapa;
   }, [agendamentos, leads, contatos]);
 
