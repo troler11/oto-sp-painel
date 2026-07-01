@@ -182,9 +182,12 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
           )}
           <div className="min-w-0">
             <p className="font-extrabold truncate">{pacienteAtivoChat.nome_paciente}</p>
-            <p className="text-[11px] text-[#11caa0] font-bold flex items-center gap-1 mt-0.5">
-              <span className="w-1.5 h-1.5 bg-[#11caa0] rounded-full animate-pulse inline-block" /> Chat em Tempo Real
-            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[11px] text-white/70 font-semibold truncate">{pacienteAtivoChat.telefone}</span>
+              <p className="text-[11px] text-[#11caa0] font-bold flex items-center gap-1 shrink-0">
+                <span className="w-1.5 h-1.5 bg-[#11caa0] rounded-full animate-pulse inline-block" /> Chat em Tempo Real
+              </p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
