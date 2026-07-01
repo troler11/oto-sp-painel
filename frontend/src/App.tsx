@@ -291,7 +291,13 @@ export default function App() {
             })
             .catch(() => {});
         } else {
-          setMensagens(prev => [...prev, { texto: payload.texto, origem: payload.origem ?? 'paciente', data: payload.created_at || new Date().toISOString() }]);
+          setMensagens(prev => {
+            const origem = payload.origem ?? 'paciente';
+            const data = payload.created_at || new Date().toISOString();
+            const chave = `${origem}|${Math.floor(new Date(data).getTime() / 2000)}|${payload.texto}`;
+            const jaExiste = prev.some(m => `${m.origem}|${Math.floor(new Date(m.data).getTime() / 2000)}|${m.texto}` === chave);
+            return jaExiste ? prev : [...prev, { texto: payload.texto, origem, data }];
+          });
         }
       } else {
         adicionarNotificacao(`Nova mensagem de ${payload.telefone}`, 'info');
