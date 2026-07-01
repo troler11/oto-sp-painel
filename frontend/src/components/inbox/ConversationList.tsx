@@ -66,9 +66,12 @@ export default function ConversationList({ itens, leadsTriagem, contatos, telefo
       triagem = [];
     }
     if (quickFiltro === 'BOT') {
-      // "IA" = o que está sendo triado/atendido pela IA agora
+      // "IA" = só o que está em triagem ativa com o bot (contato sem ticket ainda).
+      // Não usa status_robo do ticket aqui: ao finalizar/cancelar/agendar um ticket o
+      // backend reseta o contato para 'Robô' de novo, o que faria tickets já encerrados
+      // aparecerem aqui incorretamente.
       triagem = triagem.filter(l => l.status_robo === 'Robô');
-      tickets = tickets.filter(a => statusRoboPorTelefone.get(a.telefone) === 'Robô');
+      tickets = [];
     }
     if (quickFiltro === 'HUMANO') {
       // "Humano" = o que está pendente para atendimento humano
