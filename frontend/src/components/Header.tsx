@@ -19,6 +19,7 @@ const TITULO: Record<string, string> = {
   RELATORIOS: 'Relatórios & BI',
   LEADS: 'Recuperação Ativa',
   'EM ATENDIMENTO': 'Em Atendimento',
+  MINHAS_TAREFAS: 'Minhas Tarefas',
 };
 
 export default function Header({ filtro, searchTerm, setSearchTerm, dataInicio, setDataInicio, dataFim, setDataFim, carregandoDados, buscarDados, notificacoes, setNotificacoes, painelNotifAberto, setPainelNotifAberto }: Props) {

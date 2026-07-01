@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, Clock, Zap, CalendarDays, CheckCircle2, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi, Users } from 'lucide-react';
+import { Activity, Clock, Zap, CalendarDays, CheckCircle2, XCircle, Target, BarChart3, FileText, UserPlus, ShieldCheck, LogOut, ChevronLeft, ChevronRight, Wifi, Users, ListChecks } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getAvatarCor } from '../utils/helpers';
 
@@ -16,6 +16,7 @@ interface Props {
 }
 
 const ABAS_NAV = [
+  { id: 'MINHAS_TAREFAS', icon: <ListChecks size={17} />, label: 'Minhas Tarefas' },
   { id: 'TRIAGEM', icon: <Activity size={17} />, label: 'Triagem' },
   { id: 'PENDENTE', icon: <Clock size={17} />, label: 'Pendentes' },
   { id: 'EM ATENDIMENTO', icon: <Zap size={17} />, label: 'Em Atendimento' },

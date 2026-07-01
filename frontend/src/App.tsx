@@ -664,7 +664,8 @@ export default function App() {
     CONFIRMADO: agendamentos.filter(a => a.status_atendimento === 'CONFIRMADO').length,
     FINALIZADO: agendamentos.filter(a => a.status_atendimento === 'FINALIZADO').length,
     CANCELADO: agendamentos.filter(a => a.status_atendimento === 'CANCELADO').length,
-  }), [leads, agendamentos]);
+    MINHAS_TAREFAS: agendamentos.filter(a => a.atendente_nome === sessao?.user.nome && ['EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO'].includes(a.status_atendimento)).length,
+  }), [leads, agendamentos, sessao]);
 
   useEffect(() => {
     const pendentes = contagens.PENDENTE ?? 0;
@@ -673,6 +674,27 @@ export default function App() {
 
   const filtrosLeads = useMemo(() => aplicarFiltros(leads, true), [aplicarFiltros, leads]);
   const filtrosAg = useMemo(() => aplicarFiltros(agendamentos), [aplicarFiltros, agendamentos]);
+
+  // Lista pessoal: só os tickets ativos assumidos por mim, ordenados por urgência
+  // (consulta atrasada > em atendimento parado há mais tempo > consulta futura mais próxima)
+  const minhasTarefas = useMemo(() => {
+    const meuNome = sessao?.user.nome;
+    if (!meuNome) return [];
+    const agora = Date.now();
+    const comPrioridade = filtrosAg
+      .filter(a => a.atendente_nome === meuNome && ['EM ATENDIMENTO', 'AGENDADO', 'CONFIRMADO'].includes(a.status_atendimento))
+      .map(a => {
+        const dataHoraConsulta = a.data_consulta ? new Date(`${a.data_consulta.split('T')[0]}T${a.hora_consulta || '00:00'}`).getTime() : null;
+        const atrasada = dataHoraConsulta !== null && dataHoraConsulta < agora;
+        let tier: number; let ordem: number;
+        if (atrasada) { tier = 0; ordem = agora - dataHoraConsulta!; }
+        else if (a.status_atendimento === 'EM ATENDIMENTO') { tier = 1; ordem = agora - new Date(a.data_atualizacao || a.data_criacao).getTime(); }
+        else { tier = 2; ordem = dataHoraConsulta !== null ? dataHoraConsulta - agora : Infinity; }
+        return { item: a, tier, ordem };
+      });
+    comPrioridade.sort((x, y) => x.tier - y.tier || y.ordem - x.ordem);
+    return comPrioridade.map(c => c.item);
+  }, [filtrosAg, sessao]);
   const listaLeads = useMemo(() => contatos
     .filter(c => c.status_robo !== 'Bloqueado')
     .filter(c => {
@@ -923,7 +945,7 @@ export default function App() {
           <Header filtro={filtro} searchTerm={searchTerm} setSearchTerm={setSearchTerm} dataInicio={dataInicio} setDataInicio={setDataInicio} dataFim={dataFim} setDataFim={setDataFim} carregandoDados={carregandoDados} buscarDados={buscarDados} notificacoes={notificacoes} setNotificacoes={setNotificacoes} painelNotifAberto={painelNotifAberto} setPainelNotifAberto={setPainelNotifAberto} />
 
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            {!['RELATORIOS', 'LEADS', 'CONTATOS'].includes(filtro) && (
+            {!['RELATORIOS', 'LEADS', 'CONTATOS', 'MINHAS_TAREFAS'].includes(filtro) && (
               <div className="flex items-center gap-3 mb-6">
                 <div className="flex-1 flex gap-1.5 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto scrollbar-hide">
                   {ABAS.map(aba => (
@@ -1097,6 +1119,20 @@ export default function App() {
               );
             })() : filtro === 'RELATORIOS' ? (
               <Dashboard agendamentos={agendamentos} leads={leads} />
+            ) : filtro === 'MINHAS_TAREFAS' ? (
+              primeiraCarregamento ? <CardSkeletonGrid count={6} /> : !minhasTarefas.length ? (
+                <div className="col-span-full py-20 text-center">
+                  <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-slate-300" /></div>
+                  <p className="text-slate-500 font-bold">Nenhuma tarefa pendente atribuída a você.</p>
+                  <p className="text-slate-400 text-sm mt-1">Tickets que você assumir aparecem aqui, ordenados por urgência.</p>
+                </div>
+              ) : (
+                <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 pb-10">
+                  {minhasTarefas.map(item => (
+                    <PatientCard key={item.id} item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
+                  ))}
+                </div>
+              )
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
                 <SortableContext items={filtrosAg.map(a => String(a.id))} strategy={verticalListSortingStrategy}>
