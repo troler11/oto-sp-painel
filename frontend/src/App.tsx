@@ -764,7 +764,11 @@ export default function App() {
       const ag = item as Agendamento; const ld = item as Lead;
       const termo = buscaDebounced.toLowerCase();
       const termoNumerico = termo.replace(/\D/g, '');
-      const matchText = (ag.nome_paciente || ld.nome_titular || '').toLowerCase().includes(termo) ||
+      // Compara com todos os campos de nome possíveis — leads em triagem costumam ter
+      // nome_titular vazio (sem CPF confirmado ainda) e só o nome_atendimento (o que o
+      // paciente disse pro bot) preenchido, que é justamente o nome exibido na lista.
+      const nomes = [ag.nome_paciente, ag.nome_titular, ld.nome_atendimento].filter((v): v is string => !!v);
+      const matchText = nomes.some(n => n.toLowerCase().includes(termo)) ||
         (ag.cpf_paciente || ld.cpf_titular || '').replace(/\D/g, '').includes(termoNumerico) ||
         (termoNumerico.length >= 3 && (ag.telefone || ld.telefone || '').replace(/\D/g, '').includes(termoNumerico));
       if (isLead) return matchText;
