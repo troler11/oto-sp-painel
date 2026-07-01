@@ -54,6 +54,7 @@ import ConfirmModal from './components/ConfirmModal';
 import ToastContainer from './components/ToastContainer';
 import { CardSkeletonGrid } from './components/CardSkeleton';
 const ScheduleModal = lazy(() => import('./components/modals/ScheduleModal'));
+const EditPatientModal = lazy(() => import('./components/modals/EditPatientModal'));
 const CancelModal = lazy(() => import('./components/modals/CancelModal'));
 const UserModal = lazy(() => import('./components/modals/UserModal'));
 const UserManagementModal = lazy(() => import('./components/modals/UserManagementModal'));
@@ -147,6 +148,7 @@ export default function App() {
   // ── Modais ────────────────────────────────────────────────────
   const [modalAberto, setModalAberto] = useState(false);
   const [pacienteSelecionado, setPacienteSelecionado] = useState<Agendamento | null>(null);
+  const [pacienteEditandoDados, setPacienteEditandoDados] = useState<Agendamento | null>(null);
   const [dataSelecionada, setDataSelecionada] = useState('');
   const [horaSelecionada, setHoraSelecionada] = useState('');
   const [medicoSelecionado, setMedicoSelecionado] = useState('');
@@ -549,6 +551,25 @@ export default function App() {
     else toast('Erro ao renomear.', 'erro');
   }, [fetchSeguro, toast]);
 
+  const salvarDadosPaciente = useCallback(async (dados: { cpf_paciente: string; nascimento_paciente: string; pagamento: string }) => {
+    if (!pacienteEditandoDados) return;
+    const id = pacienteEditandoDados.id;
+    const res = await fetchSeguro(`${API_URL}/agendamentos/${id}/dados`, { method: 'PATCH', body: JSON.stringify(dados) });
+    if (res.ok) {
+      setAgendamentos(prev => prev.map(a => a.id === id ? {
+        ...a,
+        cpf_paciente: dados.cpf_paciente ? dados.cpf_paciente.replace(/\D/g, '') : a.cpf_paciente,
+        nascimento_paciente: dados.nascimento_paciente || a.nascimento_paciente,
+        pagamento: dados.pagamento || a.pagamento,
+      } : a));
+      toast('Dados atualizados.', 'sucesso');
+      setPacienteEditandoDados(null);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      toast(d.erro || 'Erro ao salvar dados.', 'erro');
+    }
+  }, [fetchSeguro, toast, pacienteEditandoDados]);
+
   const renomearLead = async (id: number, novoNome: string) => {
     const res = await fetchSeguro(`${API_URL}/leads/${id}/nome`, { method: 'PATCH', body: JSON.stringify({ nome: novoNome }) });
     if (res.ok) setLeads(prev => prev.map(l => l.id === id ? { ...l, nome_titular: novoNome } : l));
@@ -931,7 +952,7 @@ export default function App() {
 
     return [...lista.slice(0, visibleCount).map(item => (
       <SortableCard key={item.id} id={String(item.id)}>
-        <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
+        <PatientCard item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} onEditarDados={setPacienteEditandoDados} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
       </SortableCard>
     )), <BotaoCarregarMais key="carregar-mais" total={lista.length} />];
   };
@@ -1156,7 +1177,7 @@ export default function App() {
               ) : (
                 <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 pb-10">
                   {minhasTarefas.slice(0, visibleCount).map(item => (
-                    <PatientCard key={item.id} item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
+                    <PatientCard key={item.id} item={item} onChat={carregarChat} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onAssumir={assumirAtendimento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} onTimeline={setPacienteTimeline} onRenomear={renomearAgendamento} onEditarDados={setPacienteEditandoDados} temMsgNova={telefonesComMsgNova.has(String(item.telefone).replace(/\D/g, ''))} />
                   ))}
                   <BotaoCarregarMais total={minhasTarefas.length} />
                 </div>
@@ -1189,6 +1210,7 @@ export default function App() {
 
         {pacienteTimeline && <PatientTimeline paciente={pacienteTimeline} onClose={() => setPacienteTimeline(null)} />}
         {modalAberto && pacienteSelecionado && <Suspense fallback={null}><ScheduleModal paciente={pacienteSelecionado} medicoInicial={medicoSelecionado} dataInicial={dataSelecionada} horaInicial={horaSelecionada} onSubmit={confirmarDataEHora} onClose={() => setModalAberto(false)} fetchSeguro={fetchSeguro} /></Suspense>}
+        {pacienteEditandoDados && <Suspense fallback={null}><EditPatientModal paciente={pacienteEditandoDados} onSubmit={salvarDadosPaciente} onClose={() => setPacienteEditandoDados(null)} /></Suspense>}
         {modalCancelamentoAberto && pacienteCancelamento && <Suspense fallback={null}><CancelModal paciente={pacienteCancelamento} motivo={motivoCancelamento} setMotivo={setMotivoCancelamento} onSubmit={confirmarCancelamento} onClose={() => setModalCancelamentoAberto(false)} /></Suspense>}
         {modalNovoUsuarioAberto && <Suspense fallback={null}><UserModal form={novoUsuarioForm} setForm={setNovoUsuarioForm} msg={msgNovoUsuario} onSubmit={criarNovaConta} onClose={() => setModalNovoUsuarioAberto(false)} /></Suspense>}
         {modalGestaoUsuariosAberto && <Suspense fallback={null}><UserManagementModal usuarios={listaUsuarios} editandoSenhaId={editandoSenhaId} setEditandoSenhaId={setEditandoSenhaId} novaSenha={novaSenhaGestao} setNovaSenha={setNovaSenhaGestao} editandoUsuarioId={editandoUsuarioId} setEditandoUsuarioId={setEditandoUsuarioId} novoNome={novoNomeGestao} setNovoNome={setNovoNomeGestao} onAtualizarNome={atualizarNomeUsuario} onAlterarSenha={alterarSenhaUsuario} onExcluir={excluirUsuario} onClose={() => { setModalGestaoUsuariosAberto(false); setEditandoSenhaId(null); setEditandoUsuarioId(null); }} /></Suspense>}

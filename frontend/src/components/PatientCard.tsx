@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { useProfilePic } from '../hooks/useProfilePic';
-import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History, Check, X as XIcon } from 'lucide-react';
+import { CheckCircle2, Clock, MessageSquare, User, CreditCard, MapPin, XCircle, CalendarDays, RefreshCw, Lock, SunMedium, Stethoscope, Edit2, Flame, History, Check, X as XIcon, IdCard } from 'lucide-react';
 import type { Agendamento } from '../types';
 import { formatarDataBr, formatarHoraBr, formatarHora, getUrgencia, getAvatarCor } from '../utils/helpers';
 import { useApp } from '../context/AppContext';
@@ -15,6 +15,7 @@ interface Props {
   onFinalizar: (id: number) => void;
   onTimeline: (item: Agendamento) => void;
   onRenomear: (id: number, novoNome: string) => void;
+  onEditarDados: (item: Agendamento) => void;
   temMsgNova?: boolean;
 }
 
@@ -52,7 +53,7 @@ function useTimerVivo(dataCriacao: string, ativo: boolean) {
   return tempo;
 }
 
-const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear, temMsgNova }: Props) {
+const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCancelar, onAssumir, onDevolver, onFinalizar, onTimeline, onRenomear, onEditarDados, temMsgNova }: Props) {
   const { sessao } = useApp();
   const [editandoNome, setEditandoNome] = useState(false);
   const [nomeEditado, setNomeEditado] = useState(item.nome_paciente);
@@ -153,7 +154,11 @@ const PatientCard = memo(function PatientCard({ item, onChat, onAgendar, onCance
         </div>
       )}
 
-      <div className="space-y-1 text-xs border-l-2 border-slate-100 pl-2.5 mb-4">
+      <div className="space-y-1 text-xs border-l-2 border-slate-100 pl-2.5 mb-4 relative group/dados">
+        <button onClick={() => onEditarDados(item)} title="Editar CPF, nascimento e convênio"
+          className="absolute right-0 top-0 opacity-0 group-hover/dados:opacity-100 text-slate-300 hover:text-[#005088] transition-opacity">
+          <IdCard size={13} />
+        </button>
         <p className="text-slate-600"><span className="text-slate-400">CPF:</span> {item.cpf_paciente || 'N/A'}</p>
         {item.nascimento_paciente && <p className="text-slate-600"><span className="text-slate-400">Nasc:</span> {formatarDataBr(item.nascimento_paciente)}</p>}
         {item.telefone && <p className="text-slate-600"><span className="text-slate-400">Tel:</span> {item.telefone}</p>}

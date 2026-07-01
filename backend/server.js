@@ -322,6 +322,18 @@ const validar = {
   numero: (v, min = 0) => !isNaN(Number(v)) && Number(v) >= min,
   time:   (v) => !v || /^\d{2}:\d{2}(:\d{2})?$/.test(String(v)),
   date:   (v) => !v || !isNaN(Date.parse(String(v))),
+  cpf: (v) => {
+    if (!v) return true; // opcional
+    const cpf = String(v).replace(/\D/g, '');
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+    const digito = (fatorInicial) => {
+      let soma = 0;
+      for (let i = 0; i < fatorInicial - 1; i++) soma += Number(cpf[i]) * (fatorInicial - i);
+      const resto = (soma * 10) % 11;
+      return resto === 10 ? 0 : resto;
+    };
+    return digito(10) === Number(cpf[9]) && digito(11) === Number(cpf[10]);
+  },
 };
 
 // ============================================================
@@ -1733,6 +1745,34 @@ app.patch('/api/agendamentos/:id/nome', verificarToken, async (req, res) => {
     res.json({ sucesso: true });
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao renomear.' });
+  }
+});
+
+// ============================================================
+// EDITAR DADOS CADASTRAIS DO PACIENTE (CPF, nascimento, convênio)
+// Campos coletados pelo bot podem estar ausentes ou errados; permite
+// o atendente completar/corrigir manualmente. CPF + nascimento são
+// exigidos pelo agendarNoItsaude() para sincronizar com o iTSaúde.
+// ============================================================
+app.patch('/api/agendamentos/:id/dados', verificarToken, async (req, res) => {
+  const { cpf_paciente, nascimento_paciente, pagamento } = req.body;
+  if (cpf_paciente && !validar.cpf(cpf_paciente)) return res.status(400).json({ erro: 'CPF inválido.' });
+  if (nascimento_paciente && !validar.date(nascimento_paciente)) return res.status(400).json({ erro: 'Data de nascimento inválida.' });
+  try {
+    const cpfLimpo = cpf_paciente ? cpf_paciente.replace(/\D/g, '') : null;
+    const { rowCount } = await pool.query(
+      `UPDATE agendamentos SET
+         cpf_paciente = COALESCE($1, cpf_paciente),
+         nascimento_paciente = COALESCE($2, nascimento_paciente),
+         pagamento = COALESCE($3, pagamento)
+       WHERE id = $4`,
+      [cpfLimpo, nascimento_paciente || null, pagamento || null, req.params.id]
+    );
+    if (rowCount === 0) return res.status(404).json({ erro: 'Agendamento não encontrado.' });
+    res.json({ sucesso: true });
+  } catch (err) {
+    logger.error('Erro ao editar dados do paciente', { error: err.message });
+    res.status(500).json({ erro: 'Erro ao salvar dados.' });
   }
 });
 
