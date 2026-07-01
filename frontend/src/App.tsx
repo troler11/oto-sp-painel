@@ -192,9 +192,20 @@ export default function App() {
   const socketRef = useRef<Socket | null>(null);
   const pacienteAtivoChatRef = useRef<PacienteChat | null>(null);
   const classificacoesRefrescadasRef = useRef<Set<number>>(new Set());
+  // Mapa telefone (só dígitos) → nome, usado pelo toast de nova mensagem no handler do
+  // socket (que só roda uma vez ao logar — precisa de ref pra não usar dado velho)
+  const nomesPorTelefoneRef = useRef<Map<string, string>>(new Map());
 
   // ── Effects ───────────────────────────────────────────────────
   useEffect(() => { pacienteAtivoChatRef.current = pacienteAtivoChat; }, [pacienteAtivoChat]);
+
+  useEffect(() => {
+    const mapa = new Map<string, string>();
+    agendamentos.forEach(a => mapa.set(a.telefone.replace(/\D/g, ''), a.nome_paciente));
+    leads.forEach(l => mapa.set(l.telefone.replace(/\D/g, ''), l.nome_atendimento || l.nome_titular || l.telefone));
+    contatos.forEach(c => { const tel = c.telefone.replace(/\D/g, ''); if (!mapa.has(tel)) mapa.set(tel, c.nome_atendimento || c.nome_titular || c.telefone); });
+    nomesPorTelefoneRef.current = mapa;
+  }, [agendamentos, leads, contatos]);
 
   // Mantém o ticket selecionado na caixa de entrada sincronizado após ações
   // (assumir, agendar, cancelar, finalizar) que atualizam o array agendamentos
@@ -317,7 +328,10 @@ export default function App() {
           });
         }
       } else {
-        adicionarNotificacao(`Nova mensagem de ${payload.telefone}`, 'info');
+        const nome = nomesPorTelefoneRef.current.get(payload.telefone.replace(/\D/g, '')) || payload.telefone;
+        const preview = payload.texto && payload.texto.length > 60 ? `${payload.texto.slice(0, 60)}…` : (payload.texto || '');
+        adicionarNotificacao(`Nova mensagem de ${nome}`, 'info');
+        toast(`💬 ${nome}: ${preview}`, 'info');
         setTelefonesComMsgNova(prev => new Set(prev).add(payload.telefone));
       }
     });
