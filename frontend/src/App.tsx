@@ -129,6 +129,7 @@ export default function App() {
   const [chatAberto, setChatAberto] = useState(false);
   const [pacienteAtivoChat, setPacienteAtivoChat] = useState<PacienteChat | null>(null);
   const [agendamentoSelecionado, setAgendamentoSelecionado] = useState<Agendamento | null>(null);
+  const [painelPerfilAberto, setPainelPerfilAberto] = useState(false);
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const ultimaMsgDataRef = useRef<string | null>(null);
   const [novaMensagem, setNovaMensagem] = useState('');
@@ -1162,13 +1163,14 @@ export default function App() {
                       onEnviar={enviarMensagemChat} onEnviarMidia={enviarMidiaChat} enviandoMidia={enviandoMidia}
                       onInterromperRobo={interromperRobo} onReativarRobo={reativarRobo}
                       onAbrirModelos={() => { setModalModelosAberto(true); setDropdownModelosAberto(false); }} onEditarModelo={abrirEdicaoModelo} onRemoverModelo={removerModelo}
-                      agendamento={agendamentoSelecionado} onAssumir={assumirAtendimento} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento} />
+                      agendamento={agendamentoSelecionado} onAssumir={assumirAtendimento} onAgendar={iniciarAgendamento} onCancelar={iniciarCancelamento} onDevolver={devolverParaFila} onFinalizar={finalizarAtendimento}
+                      perfilAberto={painelPerfilAberto} onTogglePerfil={() => setPainelPerfilAberto(v => !v)} />
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-slate-400 text-sm font-semibold bg-slate-50">
                       Selecione um atendimento na lista à esquerda
                     </div>
                   )}
-                  {agendamentoSelecionado && (
+                  {agendamentoSelecionado && painelPerfilAberto && (
                     <PatientProfilePanel paciente={agendamentoSelecionado} agendamentos={agendamentos} onEditarDados={setPacienteEditandoDados} onSalvarObservacoes={salvarObservacoes} />
                   )}
                 </div>

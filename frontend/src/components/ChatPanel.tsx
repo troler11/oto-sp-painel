@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip, CheckCircle2, CalendarDays, Bot, Lock } from 'lucide-react';
+import { X, XCircle, FileText, ChevronDown, ChevronUp, Settings2, Edit2, Trash2, RefreshCw, Send, Paperclip, CheckCircle2, CalendarDays, Bot, Lock, PanelRight } from 'lucide-react';
 import type { Agendamento, ModeloMensagem, MensagemChat, PacienteChat } from '../types';
 import { useApp } from '../context/AppContext';
 import { useProfilePic } from '../hooks/useProfilePic';
@@ -124,9 +124,12 @@ interface Props {
   onCancelar?: (item: Agendamento) => void;
   onDevolver?: (id: number) => void;
   onFinalizar?: (id: number) => void;
+  // Painel de dados do paciente (Perfil/Histórico/Agendamentos/Observações) — fica escondido por padrão
+  perfilAberto?: boolean;
+  onTogglePerfil?: () => void;
 }
 
-export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onEnviarMidia, enviandoMidia, onInterromperRobo, onReativarRobo, onAbrirModelos, onEditarModelo, onRemoverModelo, agendamento, onAssumir, onAgendar, onCancelar, onDevolver, onFinalizar }: Props) {
+export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, setNovaMensagem, enviandoMensagem, digitando, modelos, dropdownModelosAberto, setDropdownModelosAberto, onClose, onEnviar, onEnviarMidia, enviandoMidia, onInterromperRobo, onReativarRobo, onAbrirModelos, onEditarModelo, onRemoverModelo, agendamento, onAssumir, onAgendar, onCancelar, onDevolver, onFinalizar, perfilAberto, onTogglePerfil }: Props) {
   const { sessao } = useApp();
   const podeEditar = !agendamento || ['AGENDADO', 'CONFIRMADO', 'EM ATENDIMENTO'].includes(agendamento.status_atendimento) || sessao?.user.nome === agendamento.atendente_nome || sessao?.user.papel === 'admin' || sessao?.user.papel === 'gerente';
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -190,6 +193,12 @@ export default function ChatPanel({ pacienteAtivoChat, mensagens, novaMensagem, 
             <button onClick={() => onReativarRobo(pacienteAtivoChat.telefone)}
               className="bg-blue-500/80 hover:bg-blue-500 text-white text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg flex items-center gap-1 uppercase tracking-wider transition-colors">
               <Bot size={13} /> Reativar Bot
+            </button>
+          )}
+          {onTogglePerfil && (
+            <button onClick={onTogglePerfil} title={perfilAberto ? 'Esconder dados do paciente' : 'Mostrar dados do paciente'}
+              className={`p-2 rounded-xl transition-colors ${perfilAberto ? 'bg-white/25' : 'hover:bg-white/15'}`}>
+              <PanelRight size={18} />
             </button>
           )}
           <button onClick={() => { onClose(); setDropdownModelosAberto(false); }} className="p-2 hover:bg-white/15 rounded-xl transition-colors"><X size={19} /></button>
